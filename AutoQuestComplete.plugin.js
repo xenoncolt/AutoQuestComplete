@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you.... Inspired from @aamiaa/CompleteDiscordQuest
- * @version 0.0.1
+ * @version 0.1.0
  * @author Xenon Colt
  * @authorLink https://xenoncolt.me
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.me",
-        version: "0.0.1",
+        version: "0.1.0",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -30,16 +30,15 @@ const config = {
         github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
     },
     changelog: [
-        // {
-        //     title: "New Features & Improvements",
-        //     type: "added",
-        //     items: [
-        //         "Added color to the status change toast notifications",
-        //         "Refactored the code",
-        //         "",
-        //         "",
-        //     ]
-        // },
+        {
+            title: "New Features & Improvements",
+            type: "added",
+            items: [
+                "Added auto update feature",
+                "Refactored the code",
+                "Added Changelog Message",
+            ]
+        },
         // {
         //     title: "Fixed Few Things",
         //     type: "fixed",
@@ -72,6 +71,33 @@ class AutoQuestComplete {
         this._boundHandleQuestChange = this.handleQuestChange.bind(this);
         this._activeQuestId = null;
         this._activeQuestName = null;
+
+        try {
+            let currentVersionInfo = {};
+            try {
+                currentVersionInfo = Object.assign({}, { version: this._config.info.version, hasShownChangelog: false }, Data.load(this._config.info.name, "currentVersionInfo"));
+            } catch (err) {
+                currentVersionInfo = { version: this._config.info.version, hasShownChangelog: false };
+            }
+            if (this._config.info.version != currentVersionInfo.version) currentVersionInfo.hasShownChangelog = false;
+            currentVersionInfo.version = this._config.info.version;
+            Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
+
+            this.checkForUpdate();
+
+            if (!currentVersionInfo.hasShownChangelog) {
+                UI.showChangelogModal({
+                    title: "AutoQuestComplete Changelog",
+                    subtitle: this._config.info.version,
+                    changes: this._config.changelog
+                });
+                currentVersionInfo.hasShownChangelog = true;
+                Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
+            }
+        }
+        catch (err) {
+            Logger.error(this._config.info.name, err);
+        }
     }
 
     start() {
@@ -258,39 +284,49 @@ class AutoQuestComplete {
         }
     }
 
-    // async checkForUpdate() {
-    //     try {
-    //         let fileContent = await (await fetch(this._config.info.github_raw, { headers: { "User-Agent": "BetterDiscord" } })).text();
-    //         let remoteMeta = this.parseMeta(fileContent);
-    //         if (Utils.semverCompare(this._config.info.version, remoteMeta.version) > 0) {
-    //             this.newUpdateNotify(remoteMeta, fileContent);
-    //         }
-    //     }
-    //     catch (err) {
-    //         Logger.error(this._config.info.name, err);
-    //     }
+    async checkForUpdate() {
+        try {
+            let fileContent = await (await fetch(this._config.info.github_raw, { headers: { "User-Agent": "BetterDiscord" } })).text();
+            let remoteMeta = this.parseMeta(fileContent);
+            if (Utils.semverCompare(this._config.info.version, remoteMeta.version) > 0) {
+                this.newUpdateNotify(remoteMeta, fileContent);
+            }
+        }
+        catch (err) {
+            Logger.error(this._config.info.name, err);
+        }
 
-    // }
+    }
 
-    // newUpdateNotify(remoteMeta, remoteFile) {
-    //     Logger.info(this._config.info.name, "A new update is available!");
+    newUpdateNotify(remoteMeta, remoteFile) {
+        Logger.info(this._config.info.name, "A new update is available!");
 
-    //     UI.showConfirmationModal("Update Available", [`Update ${remoteMeta.version} is now available for AutoDNDOnGame!`, "Press Download Now to update!"], {
-    //         confirmText: "Download Now",
-    //         onConfirm: async (e) => {
-    //             if (remoteFile) {
-    //                 await new Promise(r => require("fs").writeFile(require("path").join(BdApi.Plugins.folder, `${this._config.info.name}.plugin.js`), remoteFile, r));
-    //                 try {
-    //                     let currentVersionInfo = Data.load(this._config.info.name, "currentVersionInfo");
-    //                     currentVersionInfo.hasShownChangelog = false;
-    //                     Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
-    //                 } catch (err) {
-    //                     UI.showToast("An error occurred when trying to download the update!", { type: "error" });
-    //                 }
-    //             }
-    //         }
-    //     });
-    // }
+        UI.showConfirmationModal("Update Available", [`Update ${remoteMeta.version} is now available for AutoQuestComplete!`, "Press Download Now to update!"], {
+            confirmText: "Download Now",
+            onConfirm: async (e) => {
+                if (remoteFile) {
+                    await new Promise(r => require("fs").writeFile(require("path").join(BdApi.Plugins.folder, `${this._config.info.name}.plugin.js`), remoteFile, r));
+                    try {
+                        let currentVersionInfo = Data.load(this._config.info.name, "currentVersionInfo");
+                        currentVersionInfo.hasShownChangelog = false;
+                        Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
+                    } catch (err) {
+                        UI.showToast("An error occurred when trying to download the update!", { type: "error" });
+                    }
+                }
+            }
+        });
+    }
+
+    parseMeta(fileContent) {
+        const meta = {};
+        const regex = /@([a-zA-Z]+)\s+(.+)/g;
+        let match;
+        while ((match = regex.exec(fileContent)) !== null) {
+            meta[match[1]] = match[2].trim();
+        }
+        return meta;
+    }
 }
 
 module.exports = AutoQuestComplete;
