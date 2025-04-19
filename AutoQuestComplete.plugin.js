@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.me",
-        version: "0.1.2",
+        version: "0.1.3",
         description: "Automatically completes quests for you",
         author: [
             {
