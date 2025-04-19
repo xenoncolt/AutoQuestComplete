@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.me",
-        version: "0.1.1",
+        version: "0.1.2",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -30,15 +30,15 @@ const config = {
         github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
     },
     changelog: [
-        {
-            title: "New Features & Improvements",
-            type: "added",
-            items: [
-                "Added auto update feature",
-                "Refactored the code",
-                "Added Changelog Message",
-            ]
-        },
+        // {
+        //     title: "New Features & Improvements",
+        //     type: "added",
+        //     items: [
+        //         "Added auto update feature",
+        //         "Refactored the code",
+        //         "Added Changelog Message",
+        //     ]
+        // },
         // {
         //     title: "Fixed Few Things",
         //     type: "fixed",
@@ -49,16 +49,16 @@ const config = {
         //         "",
         //     ]
         // },
-        // {
-        //     title: "Changed Few Things",
-        //     type: "changed",
-        //     items: [
-        //         "",
-        //         "",
-        //         "",
-        //         ""
-        //     ]
-        // }
+        {
+            title: "Changed Few Things",
+            type: "changed",
+            items: [
+                "Refactor quest handling logic",
+                "Improve game state management",
+                "",
+                ""
+            ]
+        }
     ],
 }
 
