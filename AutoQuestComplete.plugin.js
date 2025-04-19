@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you.... Inspired from @aamiaa/CompleteDiscordQuest
- * @version 0.1.2
+ * @version 0.1.3
  * @author Xenon Colt
  * @authorLink https://xenoncolt.me
  * @website https://github.com/xenoncolt/AutoQuestComplete
