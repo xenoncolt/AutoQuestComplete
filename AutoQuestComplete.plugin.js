@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you.... Inspired from @aamiaa/CompleteDiscordQuest
- * @version 0.1.1
+ * @version 0.1.2
  * @author Xenon Colt
  * @authorLink https://xenoncolt.me
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -39,24 +39,20 @@ const config = {
         //         "Added Changelog Message",
         //     ]
         // },
-        // {
-        //     title: "Fixed Few Things",
-        //     type: "fixed",
-        //     items: [
-        //         "Removed \"Back to online Delay\" from the settings panel",
-        //         "Removed polling interval related all thing coz its not needed",
-        //         "",
-        //         "",
-        //     ]
-        // },
+        {
+            title: "Fixed Few Things",
+            type: "fixed",
+            items: [
+                "Forget to update the version (ahhhh when i will stop making this silly mistake)",
+                "Also forget to update the changelog"
+            ]
+        },
         {
             title: "Changed Few Things",
             type: "changed",
             items: [
                 "Refactor quest handling logic",
-                "Improve game state management",
-                "",
-                ""
+                "Improve game state management"
             ]
         }
     ],
