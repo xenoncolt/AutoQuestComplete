@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you.... Inspired from @aamiaa/CompleteDiscordQuest
- * @version 0.1.0
+ * @version 0.1.1
  * @author Xenon Colt
  * @authorLink https://xenoncolt.me
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.me",
-        version: "0.1.0",
+        version: "0.1.1",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -155,8 +155,9 @@ class AutoQuestComplete {
         let ApplicationStreamingStore = Webpack.getStore("ApplicationStreamingStore");
         let FluxDispatcher = Webpack.getByKeys("actionLogger");
         let api = Object.values(wpRequire.c).find(x => x?.exports?.tn?.get)?.exports?.tn;
+        let RunningGameStore = Webpack.getStore("RunningGameStore");
 
-        let isApp = navigator.userAgent.includes("Electron/");
+        let isApp = typeof DiscordNative !== "undefined";
         if (!quest) {
             console.log("No uncompleted quests found.");
             UI.showToast("No uncompleted quests found.", {type:"info"});
@@ -171,10 +172,10 @@ class AutoQuestComplete {
 
         if (taskName === "WATCH_VIDEO") {
             const tolerance = 2, speed = 10;
-            const diff = Math.floor((Date.now() - new Date(quest.userStatus.enrolledAt).getTime())/1000);
-            const startingPoint = Math.min(Math.max(Math.ceil(secondsDone), diff), secondsNeeded);
+            // const diff = Math.floor((Date.now() - new Date(quest.userStatus.enrolledAt).getTime())/1000);
+            // const startingPoint = Math.min(Math.max(Math.ceil(secondsDone), diff), secondsNeeded);
             (async () => {
-                for(let i = startingPoint; i <= secondsNeeded; i += speed) {
+                for(let i = secondsDone; i <= secondsNeeded; i += speed) {
                     try {
                         await api.post({url: `/quests/${quest.id}/video-progress`, body: {timestamp: Math.min(secondsNeeded, i + Math.random())}});
                     } catch(ex) {
@@ -188,8 +189,8 @@ class AutoQuestComplete {
                 console.log("Quest completed!");
                 UI.showToast("Quest completed!", {type:"success"});
             })();
-            console.log(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - startingPoint)/speed*tolerance)} sec.`);
-            UI.showToast(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - startingPoint)/speed*tolerance)} sec.`, {type:"info"});
+            console.log(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/speed*tolerance)} sec.`);
+            UI.showToast(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/speed*tolerance)} sec.`, {type:"info"});
         }
         else if (taskName === "PLAY_ON_DESKTOP") {
             if (!isApp) {
@@ -200,7 +201,6 @@ class AutoQuestComplete {
             api.get({url: `/applications/public?application_ids=${this._activeQuestId}`}).then(res => {
                 const appData = res.body[0];
                 const exeName = appData.executables.find(x => x.os === "win32").name.replace(">","");
-                const games = Webpack.getStore("RunningGameStore").getRunningGames();
                 const fakeGame = {
                     cmdLine: `C:\\Program Files\\${appData.name}\\${exeName}`,
                     exeName,
@@ -214,8 +214,14 @@ class AutoQuestComplete {
                     processName: appData.name,
                     start: Date.now(),
                 };
-                games.push(fakeGame);
-                FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: [], added: [fakeGame], games: games});
+                const realGames = RunningGameStore.getRunningGames();
+                const fakeGames = [fakeGame];
+                const realGetRunningGames = RunningGameStore.getRunningGames;
+                const realGetGameForPID = RunningGameStore.getGameForPID;
+                //games.push(fakeGame);
+                RunningGameStore.getRunningGames = () => fakeGames;
+                RunningGameStore.getGameForPID = (pid) => fakeGames.find(x => x.pid === pid);
+                FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames});
                 
                 let fn = data => {
                     let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.PLAY_ON_DESKTOP.value);
@@ -223,11 +229,14 @@ class AutoQuestComplete {
                     if(progress >= secondsNeeded) {
                         console.log("Quest completed!");
                         UI.showToast("Quest completed!", {type:"success"});
-                        const idx = games.indexOf(fakeGame);
-                        if(idx > -1) {
-                            games.splice(idx, 1);
-                            FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: []});
-                        }
+                        // const idx = games.indexOf(fakeGame);
+                        // if(idx > -1) {
+                        //     games.splice(idx, 1);
+                        //     FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: []});
+                        // }
+                        RunningGameStore.getRunningGames = realGetRunningGames;
+                        RunningGameStore.getGameForPID = realGetGameForPID;
+                        FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
                         FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
                     }
                 };
