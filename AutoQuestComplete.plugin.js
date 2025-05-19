@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you.... Inspired from @aamiaa/CompleteDiscordQuest
- * @version 0.1.3
+ * @version 0.1.4
  * @author Xenon Colt
  * @authorLink https://xenoncolt.me
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.me",
-        version: "0.1.3",
+        version: "0.1.4",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -40,21 +40,21 @@ const config = {
         //     ]
         // },
         {
-            title: "Fixed Few Things",
+            title: "Hot Fixes",
             type: "fixed",
             items: [
-                "Forget to update the version (ahhhh when i will stop making this silly mistake)",
-                "Also forget to update the changelog"
+                "Fix where video quest not completing",
+                ""
             ]
         },
-        {
-            title: "Changed Few Things",
-            type: "changed",
-            items: [
-                "Refactor quest handling logic",
-                "Improve game state management"
-            ]
-        }
+        // {
+        //     title: "Changed Few Things",
+        //     type: "changed",
+        //     items: [
+        //         "Refactor quest handling logic",
+        //         "Improve game state management"
+        //     ]
+        // }
     ],
 }
 
@@ -145,8 +145,8 @@ class AutoQuestComplete {
 
     runQuest(quest) {
         delete window.$;
-        let wpRequire;
-        window.webpackChunkdiscord_app.push([[ Math.random() ], {}, (req) => { wpRequire = req; }]);
+        let wpRequire = webpackChunkdiscord_app.push([[Symbol()], {}, wr => wr]);
+        webpackChunkdiscord_app.pop();
 
         let ApplicationStreamingStore = Webpack.getStore("ApplicationStreamingStore");
         let FluxDispatcher = Webpack.getByKeys("actionLogger");
