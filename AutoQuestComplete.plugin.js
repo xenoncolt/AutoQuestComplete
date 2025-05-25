@@ -44,7 +44,7 @@ const config = {
             type: "fixed",
             items: [
                 "Fix where video quest works only few seconds",
-                "Fix video quest api rate limit but it be not fast as before",
+                "Fixed the video quest API rate limit, but it won’t be as fast as before",
             ]
         },
         // {
