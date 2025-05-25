@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you.... Inspired from @aamiaa/CompleteDiscordQuest
- * @version 0.1.4
+ * @version 0.1.5
  * @author Xenon Colt
  * @authorLink https://xenoncolt.me
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.me",
-        version: "0.1.4",
+        version: "0.1.5",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -43,8 +43,8 @@ const config = {
             title: "Hot Fixes",
             type: "fixed",
             items: [
-                "Fix where video quest not completing",
-                ""
+                "Fix where video quest works only few seconds",
+                "Fix video quest api rate limit but it be not fast as before",
             ]
         },
         // {
@@ -164,29 +164,34 @@ class AutoQuestComplete {
         const taskName = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY"]
             .find(x => quest.config.taskConfig.tasks[x] != null);
         const secondsNeeded = quest.config.taskConfig.tasks[taskName].target;
-        const secondsDone = quest.userStatus?.progress?.[taskName]?.value ?? 0;
+        let secondsDone = quest.userStatus?.progress?.[taskName]?.value ?? 0;
 
         if (taskName === "WATCH_VIDEO") {
-            const tolerance = 2, speed = 10;
-            // const diff = Math.floor((Date.now() - new Date(quest.userStatus.enrolledAt).getTime())/1000);
-            // const startingPoint = Math.min(Math.max(Math.ceil(secondsDone), diff), secondsNeeded);
+            const maxPreview = 10, speed = 7, intervalTime = 1;
+            const enrolledAt = new Date(quest.userStatus.enrolledAt).getTime();
+
             (async () => {
-                for(let i = secondsDone; i <= secondsNeeded; i += speed) {
-                    try {
-                        await api.post({url: `/quests/${quest.id}/video-progress`, body: {timestamp: Math.min(secondsNeeded, i + Math.random())}});
-                    } catch(ex) {
-                        console.log("Failed at", i, ex.message);
+                while (true) {
+                    const maxAllowedTime = Math.floor((Date.now() - enrolledAt)/ 1000) + maxPreview;
+                    const diff = maxAllowedTime - secondsDone;
+                    const timestamp = secondsDone + speed;
+
+                    if (diff >= speed) {
+                        await api.post({url: `/quests/${quest.id}/video-progress`, body: {timestamp: Math.min(secondsNeeded, timestamp + Math.random())}});
+                        secondsDone = Math.min(secondsNeeded, timestamp);
                     }
-                    await new Promise(resolve => setTimeout(resolve, tolerance * 1000));
+
+                    if (timestamp >= secondsNeeded) {
+                        break;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, intervalTime * 1000));
                 }
-                if((secondsNeeded - secondsDone) % speed !== 0) {
-                    await api.post({url: `/quests/${quest.id}/video-progress`, body: {timestamp: secondsNeeded}});
-                }
-                console.log("Quest completed!");
+                Logger.info(this._config.info.name, "Quest completed!");
                 UI.showToast("Quest completed!", {type:"success"});
             })();
-            console.log(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/speed*tolerance)} sec.`);
-            UI.showToast(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/speed*tolerance)} sec.`, {type:"info"});
+
+            Logger.info(this._config.info.name, `Spoofing video for ${this._activeQuestName}.`);
+            UI.showToast(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/speed)} sec.`, {type:"info"});
         }
         else if (taskName === "PLAY_ON_DESKTOP") {
             if (!isApp) {
