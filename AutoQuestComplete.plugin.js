@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you.... Inspired from @aamiaa/CompleteDiscordQuest
- * @version 0.1.5
+ * @version 0.1.6
  * @author Xenon Colt
  * @authorLink https://xenoncolt.me
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.me",
-        version: "0.1.5",
+        version: "0.1.6",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -39,22 +39,21 @@ const config = {
         //         "Added Changelog Message",
         //     ]
         // },
-        {
-            title: "Hot Fixes",
-            type: "fixed",
-            items: [
-                "Fix where video quest works only few seconds",
-                "Fixed the video quest API rate limit, but it won’t be as fast as before",
-            ]
-        },
         // {
-        //     title: "Changed Few Things",
-        //     type: "changed",
+        //     title: "Hot Fixes",
+        //     type: "fixed",
         //     items: [
-        //         "Refactor quest handling logic",
-        //         "Improve game state management"
+        //         "Fix where video quest works only few seconds",
+        //         "Fixed the video quest API rate limit, but it won’t be as fast as before",
         //     ]
-        // }
+        // },
+        {
+            title: "Changed Few Things",
+            type: "changed",
+            items: [
+                "Refactor logging to use Logger for improved error handling and status updates"
+            ]
+        }
     ],
 }
 
@@ -115,7 +114,7 @@ class AutoQuestComplete {
                 this.runQuest(quest);
             }
         } catch (e) {
-            console.error("Error while starting AutoQuestComplete", e);
+            Logger.error(this._config.info.name, "Error while starting AutoQuestComplete", e);
             UI.showToast("Error while starting AutoQuestComplete", {type:"error"});
         }
     }
@@ -155,7 +154,7 @@ class AutoQuestComplete {
 
         let isApp = typeof DiscordNative !== "undefined";
         if (!quest) {
-            console.log("No uncompleted quests found.");
+            Logger.info(this._config.info.name, "No uncompleted quests found.");
             UI.showToast("No uncompleted quests found.", {type:"info"});
             return;
         }
@@ -195,7 +194,7 @@ class AutoQuestComplete {
         }
         else if (taskName === "PLAY_ON_DESKTOP") {
             if (!isApp) {
-                console.log("Use the desktop app for", this._activeQuestName);
+                Logger.info(this._config.info.name, "Use the desktop app for", this._activeQuestName);
                 UI.showToast(`Desktop app required for ${this._activeQuestName}`, {type:"warn"});
                 return;
             }
@@ -228,7 +227,7 @@ class AutoQuestComplete {
                     let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.PLAY_ON_DESKTOP.value);
                     console.log(`Quest progress: ${progress}/${secondsNeeded}`);
                     if(progress >= secondsNeeded) {
-                        console.log("Quest completed!");
+                        Logger.info(this._config.info.name, "Quest completed!");
                         UI.showToast("Quest completed!", {type:"success"});
                         // const idx = games.indexOf(fakeGame);
                         // if(idx > -1) {
@@ -242,13 +241,13 @@ class AutoQuestComplete {
                     }
                 };
                 FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
-                console.log(`Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/60)} min.`);
+                Logger.info(this._config.info.name, `Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/60)} min.`);
                 UI.showToast(`Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/60)} min.`, {type:"info"});
             });
         }
         else if (taskName === "STREAM_ON_DESKTOP") {
             if (!isApp) {
-                console.log("Use the desktop app for", this._activeQuestName);
+                Logger.info(this._config.info.name,"Use the desktop app for", this._activeQuestName);
                 UI.showToast(`Desktop app required for ${this._activeQuestName}`, {type:"warn"});
                 return;
             }
@@ -260,16 +259,17 @@ class AutoQuestComplete {
             });
             let fn = data => {
                 let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.STREAM_ON_DESKTOP.value);
-                console.log(`Quest progress: ${progress}/${secondsNeeded}`);
+                Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
+                UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, {type:"info"});
                 if(progress >= secondsNeeded) {
-                    console.log("Quest completed!");
+                    Logger.info(this._config.info.name, "Quest completed!");
                     UI.showToast("Quest completed!", {type:"success"});
                     ApplicationStreamingStore.getStreamerActiveStreamMetadata = this._originalStreamerFunc;
                     FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
                 }
             };
             FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
-            console.log(`Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone)/60)} min. (Need at least one VC peer)`);
+            Logger.info(this._config.info.name, `Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone)/60)} min. (Need at least one VC peer)`);
             UI.showToast(`Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone)/60)} min. (Need at least one VC peer)`, {type:"info"});
         }
         else if (taskName === "PLAY_ACTIVITY") {
@@ -288,7 +288,7 @@ class AutoQuestComplete {
                         break;
                     }
                 }
-                console.log("Quest completed!");
+                Logger.info(this._config.info.name, "Quest completed!");
                 UI.showToast("Quest completed!", {type:"success"});
             })();
         }
