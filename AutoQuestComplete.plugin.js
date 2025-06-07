@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you.... Inspired from @aamiaa/CompleteDiscordQuest
- * @version 0.1.6
+ * @version 0.1.7
  * @author Xenon Colt
  * @authorLink https://xenoncolt.me
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.me",
-        version: "0.1.6",
+        version: "0.1.7",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -225,7 +225,8 @@ class AutoQuestComplete {
                 
                 let fn = data => {
                     let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.PLAY_ON_DESKTOP.value);
-                    console.log(`Quest progress: ${progress}/${secondsNeeded}`);
+                    Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
+                    UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, {type:"info"});
                     if(progress >= secondsNeeded) {
                         Logger.info(this._config.info.name, "Quest completed!");
                         UI.showToast("Quest completed!", {type:"success"});
@@ -277,11 +278,13 @@ class AutoQuestComplete {
                 Object.values(Webpack.getStore("GuildChannelStore").getAllGuilds()).find(x => x && x.VOCAL.length > 0).VOCAL[0].channel.id;
             const streamKey = `call:${channelId}:1`;
             (async () => {
-                console.log("Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
+                Logger.info(this._config.info.name, "Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
+                UI.showToast(`Completing quest ${this._activeQuestName} - ${quest.config.messages.questName}`, {type:"info"});
                 while(true) {
                     const res = await api.post({url: `/quests/${quest.id}/heartbeat`, body: {stream_key: streamKey, terminal: false}});
                     const progress = res.body.progress.PLAY_ACTIVITY.value;
-                    console.log(`Quest progress: ${progress}/${secondsNeeded}`);
+                    Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
+                    UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, {type:"info"});
                     await new Promise(resolve => setTimeout(resolve, 20000));
                     if(progress >= secondsNeeded) {
                         await api.post({url: `/quests/${quest.id}/heartbeat`, body: {stream_key: streamKey, terminal: true}});
