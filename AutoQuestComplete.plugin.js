@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you.... Inspired from @aamiaa/CompleteDiscordQuest
- * @version 0.1.7
+ * @version 0.2.0
  * @author Xenon Colt
  * @authorLink https://xenoncolt.me
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.me",
-        version: "0.1.7",
+        version: "0.2.0",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -30,15 +30,14 @@ const config = {
         github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
     },
     changelog: [
-        // {
-        //     title: "New Features & Improvements",
-        //     type: "added",
-        //     items: [
-        //         "Added auto update feature",
-        //         "Refactored the code",
-        //         "Added Changelog Message",
-        //     ]
-        // },
+        {
+            title: "New Features & Improvements",
+            type: "added",
+            items: [
+                "Now mobile video quest works too. But u can accept only on mobile. If possible turn on the video quest on mobile and then use this plugin to complete it.",
+                "I will figure out how to accept video quest on desktop later.",
+            ]
+        },
         // {
         //     title: "Hot Fixes",
         //     type: "fixed",
@@ -51,7 +50,7 @@ const config = {
             title: "Changed Few Things",
             type: "changed",
             items: [
-                "Refactor logging to use Logger for improved error handling and status updates"
+                "Refactor few things to improve performance"
             ]
         }
     ],
@@ -144,12 +143,10 @@ class AutoQuestComplete {
 
     runQuest(quest) {
         delete window.$;
-        let wpRequire = webpackChunkdiscord_app.push([[Symbol()], {}, wr => wr]);
-        webpackChunkdiscord_app.pop();
 
         let ApplicationStreamingStore = Webpack.getStore("ApplicationStreamingStore");
-        let FluxDispatcher = Webpack.getByKeys("actionLogger");
-        let api = Object.values(wpRequire.c).find(x => x?.exports?.tn?.get)?.exports?.tn;
+        let FluxDispatcher = Webpack.getByKeys('dispatch', 'subscribe', 'register');
+        let api = Webpack.getModule(m => m?.tn?.get)?.tn;
         let RunningGameStore = Webpack.getStore("RunningGameStore");
 
         let isApp = typeof DiscordNative !== "undefined";
@@ -165,7 +162,7 @@ class AutoQuestComplete {
         const secondsNeeded = quest.config.taskConfig.tasks[taskName].target;
         let secondsDone = quest.userStatus?.progress?.[taskName]?.value ?? 0;
 
-        if (taskName === "WATCH_VIDEO") {
+        if (taskName === "WATCH_VIDEO" || taskName === "WATCH_VIDEO_ON_MOBILE") {
             const maxPreview = 10, speed = 7, intervalTime = 1;
             const enrolledAt = new Date(quest.userStatus.enrolledAt).getTime();
 
