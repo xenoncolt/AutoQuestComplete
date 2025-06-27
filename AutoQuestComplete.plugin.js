@@ -35,17 +35,16 @@ const config = {
             type: "added",
             items: [
                 "Now mobile video quest works too. But u can accept only on mobile. If possible turn on the video quest on mobile and then use this plugin to complete it.",
-                "I will figure out how to accept video quest on desktop later.",
+                "I will figure out how to accept video quest on desktop later."
             ]
         },
-        // {
-        //     title: "Hot Fixes",
-        //     type: "fixed",
-        //     items: [
-        //         "Fix where video quest works only few seconds",
-        //         "Fixed the video quest API rate limit, but it won’t be as fast as before",
-        //     ]
-        // },
+        {
+            title: "Hot Fixes",
+            type: "fixed",
+            items: [
+                "Fixed a small mistake in the code.... sry :3"
+            ]
+        },
         {
             title: "Changed Few Things",
             type: "changed",
@@ -157,7 +156,7 @@ class AutoQuestComplete {
         }
 
         const pid = Math.floor(Math.random() * 30000) + 1000;
-        const taskName = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY"]
+        const taskName = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY", "WATCH_VIDEO_ON_MOBILE"]
             .find(x => quest.config.taskConfig.tasks[x] != null);
         const secondsNeeded = quest.config.taskConfig.tasks[taskName].target;
         let secondsDone = quest.userStatus?.progress?.[taskName]?.value ?? 0;
