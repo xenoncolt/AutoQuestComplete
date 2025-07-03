@@ -1,9 +1,9 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you.... Inspired from @aamiaa/CompleteDiscordQuest
- * @version 0.2.1
+ * @version 0.2.2
  * @author Xenon Colt
- * @authorLink https://xenoncolt.me
+ * @authorLink https://xenoncolt.live
  * @website https://github.com/xenoncolt/AutoQuestComplete
  * @source https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js
  * @invite vJRe78YmN8
@@ -14,15 +14,15 @@ const config = {
     info: {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
-        website: "https://xenoncolt.me",
-        version: "0.2.1",
+        website: "https://xenoncolt.live",
+        version: "0.2.2",
         description: "Automatically completes quests for you",
         author: [
             {
                 name: "Xenon Colt",
                 inspired_from: "@aamiaa",
                 github_username: "xenoncolt",
-                link: "https://xenoncolt.me"
+                link: "https://xenoncolt.live"
             }
         ],
         github: "https://github.com/xenoncolt/AutoQuestComplete",
@@ -30,28 +30,28 @@ const config = {
         github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
     },
     changelog: [
-        {
-            title: "New Features & Improvements",
-            type: "added",
-            items: [
-                "Now mobile video quest works too. But u can accept only on mobile. If possible turn on the video quest on mobile and then use this plugin to complete it.",
-                "I will figure out how to accept video quest on desktop later."
-            ]
-        },
+        // {
+        //     title: "New Features & Improvements",
+        //     type: "added",
+        //     items: [
+        //         "Now mobile video quest works too. But u can accept only on mobile. If possible turn on the video quest on mobile and then use this plugin to complete it.",
+        //         "I will figure out how to accept video quest on desktop later."
+        //     ]
+        // },
         {
             title: "Hot Fixes",
             type: "fixed",
             items: [
-                "Fixed a small mistake in the code.... sry :3"
-            ]
-        },
-        {
-            title: "Changed Few Things",
-            type: "changed",
-            items: [
-                "Refactor few things to improve performance"
+                "Few fixes after the new discord update"
             ]
         }
+        // {
+        //     title: "Changed Few Things",
+        //     type: "changed",
+        //     items: [
+        //         "Refactor few things to improve performance"
+        //     ]
+        // }
     ],
 }
 
@@ -157,8 +157,8 @@ class AutoQuestComplete {
 
         const pid = Math.floor(Math.random() * 30000) + 1000;
         const taskName = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY", "WATCH_VIDEO_ON_MOBILE"]
-            .find(x => quest.config.taskConfig.tasks[x] != null);
-        const secondsNeeded = quest.config.taskConfig.tasks[taskName].target;
+            .find(x => quest.config.taskConfigV2.tasks[x] != null);
+        const secondsNeeded = quest.config.taskConfigV2.tasks[taskName].target;
         let secondsDone = quest.userStatus?.progress?.[taskName]?.value ?? 0;
 
         if (taskName === "WATCH_VIDEO" || taskName === "WATCH_VIDEO_ON_MOBILE") {
