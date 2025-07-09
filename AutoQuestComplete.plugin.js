@@ -1,9 +1,9 @@
 /**
  * @name AutoQuestComplete
- * @description Automatically completes quests for you.... Inspired from @aamiaa/CompleteDiscordQuest
- * @version 0.2.3
- * @author Xenon Colt
- * @authorLink https://xenoncolt.live
+ * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
+ * @version 0.2.4
+ * @author @aamiaa
+ * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
  * @source https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js
  * @invite vJRe78YmN8
@@ -15,12 +15,12 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.2.3",
+        version: "0.2.4",
         description: "Automatically completes quests for you",
         author: [
             {
-                name: "Xenon Colt",
-                inspired_from: "@aamiaa",
+                name: "@aamiaa",
+                plugin_author: "Xenon Colt",
                 github_username: "xenoncolt",
                 link: "https://xenoncolt.live"
             }
@@ -38,20 +38,20 @@ const config = {
         //         "I will figure out how to accept video quest on desktop later."
         //     ]
         // },
-        {
-            title: "Hot Fixes",
-            type: "fixed",
-            items: [
-                "Few fixes after the new discord update"
-            ]
-        }
         // {
-        //     title: "Changed Few Things",
-        //     type: "changed",
+        //     title: "Hot Fixes",
+        //     type: "fixed",
         //     items: [
-        //         "Refactor few things to improve performance"
+        //         "Few fixes after the new discord update"
         //     ]
         // }
+        {
+            title: "Changed Few Things",
+            type: "changed",
+            items: [
+                "Changed the author name and update description",
+            ]
+        }
     ],
 }
 

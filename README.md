@@ -19,4 +19,4 @@
 2. Click on the quest you want to complete.
 3. The plugin will automatically complete the quest for you.
 
- ### Note: This plugin script inspired from [aamiaa/CompleteDiscordQuest](https://gist.github.com/aamiaa/204cd9d42013ded9faf646fae7f89fbb). I just made it a plugin for BetterDiscord.
+ ### Note: This plugin script copied from [aamiaa/CompleteDiscordQuest](https://gist.github.com/aamiaa/204cd9d42013ded9faf646fae7f89fbb). I just made it a plugin for BetterDiscord.
