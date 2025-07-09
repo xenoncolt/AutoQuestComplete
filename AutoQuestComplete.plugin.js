@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you.... Inspired from @aamiaa/CompleteDiscordQuest
- * @version 0.2.2
+ * @version 0.2.3
  * @author Xenon Colt
  * @authorLink https://xenoncolt.live
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.2.2",
+        version: "0.2.3",
         description: "Automatically completes quests for you",
         author: [
             {
