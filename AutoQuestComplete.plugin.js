@@ -148,7 +148,6 @@ class AutoQuestComplete {
         let api = Webpack.getModule(m => m?.tn?.get)?.tn;
         let RunningGameStore = Webpack.getStore("RunningGameStore");
 
-        let isApp = typeof DiscordNative !== "undefined";
         if (!quest) {
             Logger.info(this._config.info.name, "No uncompleted quests found.");
             UI.showToast("No uncompleted quests found.", {type:"info"});
@@ -189,11 +188,6 @@ class AutoQuestComplete {
             UI.showToast(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/speed)} sec.`, {type:"info"});
         }
         else if (taskName === "PLAY_ON_DESKTOP") {
-            if (!isApp) {
-                Logger.info(this._config.info.name, "Use the desktop app for", this._activeQuestName);
-                UI.showToast(`Desktop app required for ${this._activeQuestName}`, {type:"warn"});
-                return;
-            }
             api.get({url: `/applications/public?application_ids=${this._activeQuestId}`}).then(res => {
                 const appData = res.body[0];
                 const exeName = appData.executables.find(x => x.os === "win32").name.replace(">","");
@@ -243,11 +237,6 @@ class AutoQuestComplete {
             });
         }
         else if (taskName === "STREAM_ON_DESKTOP") {
-            if (!isApp) {
-                Logger.info(this._config.info.name,"Use the desktop app for", this._activeQuestName);
-                UI.showToast(`Desktop app required for ${this._activeQuestName}`, {type:"warn"});
-                return;
-            }
             this._originalStreamerFunc = ApplicationStreamingStore.getStreamerActiveStreamMetadata;
             ApplicationStreamingStore.getStreamerActiveStreamMetadata = () => ({
                 id: this._activeQuestId,
