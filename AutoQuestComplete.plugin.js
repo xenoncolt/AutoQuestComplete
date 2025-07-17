@@ -1,8 +1,8 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.2.4
- * @author @aamiaa
+ * @version 0.2.5
+ * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
  * @source https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.2.4",
+        version: "0.2.5",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -38,20 +38,20 @@ const config = {
         //         "I will figure out how to accept video quest on desktop later."
         //     ]
         // },
-        // {
-        //     title: "Hot Fixes",
-        //     type: "fixed",
-        //     items: [
-        //         "Few fixes after the new discord update"
-        //     ]
-        // }
         {
-            title: "Changed Few Things",
-            type: "changed",
+            title: "Hot Fixes",
+            type: "fixed",
             items: [
-                "Changed the author name and update description",
+                "Fixed where video quest was not completing properly.",
             ]
         }
+        // {
+        //     title: "Changed Few Things",
+        //     type: "changed",
+        //     items: [
+        //         "Changed the author name and update description",
+        //     ]
+        // }
     ],
 }
 
@@ -163,6 +163,7 @@ class AutoQuestComplete {
         if (taskName === "WATCH_VIDEO" || taskName === "WATCH_VIDEO_ON_MOBILE") {
             const maxPreview = 10, speed = 7, intervalTime = 1;
             const enrolledAt = new Date(quest.userStatus.enrolledAt).getTime();
+            let isFinished = false;
 
             (async () => {
                 while (true) {
@@ -171,7 +172,8 @@ class AutoQuestComplete {
                     const timestamp = secondsDone + speed;
 
                     if (diff >= speed) {
-                        await api.post({url: `/quests/${quest.id}/video-progress`, body: {timestamp: Math.min(secondsNeeded, timestamp + Math.random())}});
+                        const response = await api.post({url: `/quests/${quest.id}/video-progress`, body: {timestamp: Math.min(secondsNeeded, timestamp + Math.random())}});
+                        isFinished = response.body.completed_at != null;
                         secondsDone = Math.min(secondsNeeded, timestamp);
                     }
 
@@ -179,6 +181,9 @@ class AutoQuestComplete {
                         break;
                     }
                     await new Promise(resolve => setTimeout(resolve, intervalTime * 1000));
+                }
+                if (!isFinished) {
+                    await api.post({url: `/quests/${quest.id}/video-progress`, body: {timestamp: secondsNeeded}});
                 }
                 Logger.info(this._config.info.name, "Quest completed!");
                 UI.showToast("Quest completed!", {type:"success"});
