@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.2.5
+ * @version 0.3.0
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.2.5",
+        version: "0.3.0",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -30,21 +30,20 @@ const config = {
         github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
     },
     changelog: [
-        // {
-        //     title: "New Features & Improvements",
-        //     type: "added",
-        //     items: [
-        //         "Now mobile video quest works too. But u can accept only on mobile. If possible turn on the video quest on mobile and then use this plugin to complete it.",
-        //         "I will figure out how to accept video quest on desktop later."
-        //     ]
-        // },
         {
-            title: "Hot Fixes",
-            type: "fixed",
+            title: "New Features & Improvements",
+            type: "added",
             items: [
-                "Fixed where video quest was not completing properly.",
+                "Now notifies you when a new quest is available."
             ]
-        }
+        },
+        // {
+        //     title: "Hot Fixes",
+        //     type: "fixed",
+        //     items: [
+        //         "Fixed where video quest was not completing properly.",
+        //     ]
+        // }
         // {
         //     title: "Changed Few Things",
         //     type: "changed",
@@ -104,6 +103,28 @@ class AutoQuestComplete {
                 !x.userStatus?.completedAt &&
                 new Date(x.config.expiresAt).getTime() > Date.now()
             );
+
+            const new_quest = [...this._questsStore.quests.values()].find(x =>
+                x.id !== "1248385850622869556" &&
+                !x.userStatus?.enrolledAt &&
+                !x.userStatus?.completedAt &&
+                new Date(x.config.expiresAt).getTime() > Date.now()
+            );
+
+            if (new_quest && new_quest !== quest) {
+                UI.showNotice("New quest available! Please accept it to start auto completing.", {
+                    type:"info",
+                    timeout: 5 * 60 * 1000,
+                    buttons: [
+                        {
+                            label: "Go to Quests",
+                            onClick: () => {
+                                open(`/quests/${new_quest.id}`);
+                            }
+                        }
+                    ]
+                });
+            };
 
             // Run Immediately in case a quest is already accepted
             if (this._questsStore && quest) {
