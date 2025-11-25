@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.3.0
+ * @version 0.3.1
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.3.0",
+        version: "0.3.1",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -30,20 +30,20 @@ const config = {
         github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
     },
     changelog: [
-        {
-            title: "New Features & Improvements",
-            type: "added",
-            items: [
-                "Now notifies you when a new quest is available."
-            ]
-        },
         // {
-        //     title: "Hot Fixes",
-        //     type: "fixed",
+        //     title: "New Features & Improvements",
+        //     type: "added",
         //     items: [
-        //         "Fixed where video quest was not completing properly.",
+        //         "Now notifies you when a new quest is available."
         //     ]
-        // }
+        // },
+        {
+            title: "Hot Fixes",
+            type: "fixed",
+            items: [
+                "Not ideal fix but for now it should work again",
+            ]
+        }
         // {
         //     title: "Changed Few Things",
         //     type: "changed",
@@ -59,7 +59,7 @@ const { Webpack, UI, Logger, Data, Utils } = BdApi;
 class AutoQuestComplete {
     constructor() {
         this._config = config;
-        this._questsStore = Webpack.getStore("QuestsStore");
+        this._questsStore = Object.values(webpackChunkdiscord_app.push([[Symbol()], {}, r => r]).c).find(x => x?.exports?.Z?.__proto__?.getQuest).exports.Z;
         this._boundHandleQuestChange = this.handleQuestChange.bind(this);
         this._activeQuestId = null;
         this._activeQuestName = null;
