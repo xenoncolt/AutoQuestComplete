@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.3.1
+ * @version 0.4.0
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.3.1",
+        version: "0.4.0",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -30,27 +30,29 @@ const config = {
         github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
     },
     changelog: [
-        // {
-        //     title: "New Features & Improvements",
-        //     type: "added",
-        //     items: [
-        //         "Now notifies you when a new quest is available."
-        //     ]
-        // },
         {
-            title: "Hot Fixes",
+            title: "New Features & Improvements",
+            type: "added",
+            items: [
+                "Used BetterDiscord's new Notification API.",
+            ]
+        },
+        {
+            title: "Fixes",
             type: "fixed",
             items: [
-                "Not ideal fix but for now it should work again",
+                "Fixed quest reminder not working properly.",
+                "Fixed some issues with quest detection."
+            ]
+        },
+        {
+            title: "Changed Few Things",
+            type: "changed",
+            items: [
+                "Updated to use new BetterDiscord APIs.",
+                "Old update notification method replaced with new Notification API."
             ]
         }
-        // {
-        //     title: "Changed Few Things",
-        //     type: "changed",
-        //     items: [
-        //         "Changed the author name and update description",
-        //     ]
-        // }
     ],
 }
 
@@ -59,8 +61,9 @@ const { Webpack, UI, Logger, Data, Utils } = BdApi;
 class AutoQuestComplete {
     constructor() {
         this._config = config;
-        this._questsStore = Object.values(webpackChunkdiscord_app.push([[Symbol()], {}, r => r]).c).find(x => x?.exports?.Z?.__proto__?.getQuest).exports.Z;
+        this._questsStore = Webpack.Stores.QuestStore;
         this._boundHandleQuestChange = this.handleQuestChange.bind(this);
+        this._boundNewQuestHandler = this.handleNewQuest.bind(this);
         this._activeQuestId = null;
         this._activeQuestName = null;
 
@@ -96,6 +99,7 @@ class AutoQuestComplete {
         try {
             if (this._questsStore && this._questsStore.addChangeListener) {
                 this._questsStore.addChangeListener(this._boundHandleQuestChange);
+                this._questsStore.addChangeListener(this._boundNewQuestHandler);
             }
             const quest = [...this._questsStore.quests.values()].find(x =>
                 x.id !== "1248385850622869556" &&
@@ -104,29 +108,6 @@ class AutoQuestComplete {
                 new Date(x.config.expiresAt).getTime() > Date.now()
             );
 
-            const new_quest = [...this._questsStore.quests.values()].find(x =>
-                x.id !== "1248385850622869556" &&
-                !x.userStatus?.enrolledAt &&
-                !x.userStatus?.completedAt &&
-                new Date(x.config.expiresAt).getTime() > Date.now()
-            );
-
-            if (new_quest && new_quest !== quest) {
-                UI.showNotice("New quest available! Please accept it to start auto completing.", {
-                    type:"info",
-                    timeout: 5 * 60 * 1000,
-                    buttons: [
-                        {
-                            label: "Go to Quests",
-                            onClick: () => {
-                                open(`/quests/${new_quest.id}`);
-                            }
-                        }
-                    ]
-                });
-            };
-
-            // Run Immediately in case a quest is already accepted
             if (this._questsStore && quest) {
                 this._activeQuestId = quest.config.application.id;
                 this._activeQuestName = quest.config.application.name;
@@ -143,6 +124,64 @@ class AutoQuestComplete {
             this._questsStore.removeChangeListener(this._boundHandleQuestChange);
         }
 
+    }
+
+    handleNewQuest() {
+        const quest = [...this._questsStore.quests.values()].find(x =>
+            x.id !== "1248385850622869556" &&
+            x.userStatus?.enrolledAt &&
+            !x.userStatus?.completedAt &&
+            new Date(x.config.expiresAt).getTime() > Date.now()
+        );
+
+        const new_quest = [...this._questsStore.quests.values()].find(x =>
+            x.id !== "1248385850622869556" &&
+            !x.userStatus?.enrolledAt &&
+            !x.userStatus?.completedAt &&
+            new Date(x.config.expiresAt).getTime() > Date.now()
+        );
+
+        if (new_quest && new_quest !== quest) {
+            // UI.showNotice("New quest available! Please accept it to start auto completing.", {
+            //     type: "info",
+            //     timeout: 5 * 60 * 1000,
+            //     buttons: [
+            //         {
+            //             label: "Go to Quests",
+            //             onClick: () => {
+            //                 open(`/quests/${new_quest.id}`);
+            //             }
+            //         }
+            //     ]
+            // });
+            this.showQuestNotification(new_quest);
+        }
+    }
+
+    showQuestNotification(quest, reminder = false) {
+        const title = reminder ? `Reminder: New Quest Available!` : `New Quest Available!`;
+        UI.showNotification({
+            title: title,
+            content: `Please accept the quest "${quest.config.application.name}" to start auto completing.`,
+            type: "info",
+            duration: 5 * 60 * 1000,
+            actions: [
+                {
+                    label: "Go to Quests",
+                    onClick: () => {
+                        open(`/quests/${quest.id}`);
+                    }
+                },
+                {
+                    label: "Remind Me Later",
+                    onClick: () => {
+                        setTimeout(() => {
+                            this.showQuestNotification(quest, true);
+                        }, 60 * 60 * 1000);
+                    }
+                }
+            ]
+        })
     }
 
     handleQuestChange() {
@@ -164,10 +203,10 @@ class AutoQuestComplete {
     runQuest(quest) {
         delete window.$;
 
-        let ApplicationStreamingStore = Webpack.getStore("ApplicationStreamingStore");
+        let ApplicationStreamingStore = Webpack.Stores.ApplicationStreamingStore;
         let FluxDispatcher = Webpack.getByKeys('dispatch', 'subscribe', 'register');
         let api = Webpack.getModule(m => m?.tn?.get)?.tn;
-        let RunningGameStore = Webpack.getStore("RunningGameStore");
+        let RunningGameStore = Webpack.Stores.RunningGameStore;
 
         if (!quest) {
             Logger.info(this._config.info.name, "No uncompleted quests found.");
@@ -285,8 +324,8 @@ class AutoQuestComplete {
             UI.showToast(`Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone)/60)} min. (Need at least one VC peer)`, {type:"info"});
         }
         else if (taskName === "PLAY_ACTIVITY") {
-            const channelId = Webpack.getStore("ChannelStore").getSortedPrivateChannels()[0]?.id ||
-                Object.values(Webpack.getStore("GuildChannelStore").getAllGuilds()).find(x => x && x.VOCAL.length > 0).VOCAL[0].channel.id;
+            const channelId = Webpack.Stores.ChannelStore.getSortedPrivateChannels()[0]?.id ||
+                Object.values(Webpack.Stores.GuildChannelStore.getAllGuilds()).find(x => x && x.VOCAL.length > 0).VOCAL[0].channel.id;
             const streamKey = `call:${channelId}:1`;
             (async () => {
                 Logger.info(this._config.info.name, "Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
@@ -325,21 +364,49 @@ class AutoQuestComplete {
     newUpdateNotify(remoteMeta, remoteFile) {
         Logger.info(this._config.info.name, "A new update is available!");
 
-        UI.showConfirmationModal("Update Available", [`Update ${remoteMeta.version} is now available for AutoQuestComplete!`, "Press Download Now to update!"], {
-            confirmText: "Download Now",
-            onConfirm: async (e) => {
-                if (remoteFile) {
-                    await new Promise(r => require("fs").writeFile(require("path").join(BdApi.Plugins.folder, `${this._config.info.name}.plugin.js`), remoteFile, r));
-                    try {
-                        let currentVersionInfo = Data.load(this._config.info.name, "currentVersionInfo");
-                        currentVersionInfo.hasShownChangelog = false;
-                        Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
-                    } catch (err) {
-                        UI.showToast("An error occurred when trying to download the update!", { type: "error" });
+        // UI.showConfirmationModal("Update Available", [`Update ${remoteMeta.version} is now available for AutoQuestComplete!`, "Press Download Now to update!"], {
+        //     confirmText: "Download Now",
+        //     onConfirm: async (e) => {
+        //         if (remoteFile) {
+        //             await new Promise(r => require("fs").writeFile(require("path").join(BdApi.Plugins.folder, `${this._config.info.name}.plugin.js`), remoteFile, r));
+        //             try {
+        //                 let currentVersionInfo = Data.load(this._config.info.name, "currentVersionInfo");
+        //                 currentVersionInfo.hasShownChangelog = false;
+        //                 Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
+        //             } catch (err) {
+        //                 UI.showToast("An error occurred when trying to download the update!", { type: "error" });
+        //             }
+        //         }
+        //     }
+        // });
+        UI.showNotification({
+            title: `${this._config.info.name} Update Available!`,
+            content: `Version ${remoteMeta.version} is now available!`,
+            type: "info",
+            duration: 1/0,
+            actions: [
+                {
+                    label: "Update Now",
+                    onClick: async (e) => {
+                        if (remoteFile) {
+                            await new Promise(r => require("fs").writeFile(require("path").join(BdApi.Plugins.folder, `${this._config.info.name}.plugin.js`), remoteFile, r));
+                            try {
+                                let currentVersionInfo = Data.load(this._config.info.name, "currentVersionInfo");
+                                currentVersionInfo.hasShownChangelog = false;
+                                Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
+                            } catch (err) {
+                                UI.showToast("An error occurred when trying to download the update!", { type: "error" });
+                                Logger.error(this._config.info.name, "An error occurred when trying to download the update!", err);
+                            }
+                        }
                     }
+                },
+                {
+                    label: "Update Later",
+                    onClick: () => { }
                 }
-            }
-        });
+            ]
+        })
     }
 
     parseMeta(fileContent) {
