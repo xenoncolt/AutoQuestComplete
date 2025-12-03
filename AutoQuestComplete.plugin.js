@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.4.0
+ * @version 0.5.0
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.4.0",
+        version: "0.5.0",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -34,26 +34,35 @@ const config = {
             title: "New Features & Improvements",
             type: "added",
             items: [
-                "Used BetterDiscord's new Notification API.",
+                "Now you can turn on/off notification for new quests",
             ]
         },
-        {
-            title: "Fixes",
-            type: "fixed",
-            items: [
-                "Fixed quest reminder not working properly.",
-                "Fixed some issues with quest detection."
-            ]
-        },
-        {
-            title: "Changed Few Things",
-            type: "changed",
-            items: [
-                "Updated to use new BetterDiscord APIs.",
-                "Old update notification method replaced with new Notification API."
-            ]
-        }
+        // {
+        //     title: "Fixes",
+        //     type: "fixed",
+        //     items: [
+        //         "Fixed quest reminder not working properly.",
+        //         "Fixed some issues with quest detection."
+        //     ]
+        // },
+        // {
+        //     title: "Changed Few Things",
+        //     type: "changed",
+        //     items: [
+        //         "Updated to use new BetterDiscord APIs.",
+        //         "Old update notification method replaced with new Notification API."
+        //     ]
+        // }
     ],
+    settingsPanel: [
+        {
+            type: "switch",
+            id: "enableNotify",
+            name: "New Quest Notification",
+            note: "Enable/Disable notification when a new quest is available.",
+            value: true
+        }
+    ]
 }
 
 const { Webpack, UI, Logger, Data, Utils } = BdApi;
@@ -66,6 +75,7 @@ class AutoQuestComplete {
         this._boundNewQuestHandler = this.handleNewQuest.bind(this);
         this._activeQuestId = null;
         this._activeQuestName = null;
+        this.settings;
 
         try {
             let currentVersionInfo = {};
@@ -96,6 +106,10 @@ class AutoQuestComplete {
     }
 
     start() {
+        this.settings = Data.load(this._config.info.name, "settings") || this._config.settingsPanel.reduce((acc, setting) => {
+            acc[setting.id] = setting.value;
+            return acc;
+        }, {});
         try {
             if (this._questsStore && this._questsStore.addChangeListener) {
                 this._questsStore.addChangeListener(this._boundHandleQuestChange);
@@ -126,6 +140,20 @@ class AutoQuestComplete {
 
     }
 
+    getSettingsPanel() {
+        for (const settings of this._config.settingsPanel) {
+            settings.value = this.settings[settings.id];
+        }
+        
+        return UI.buildSettingsPanel({
+            settings: this._config.settingsPanel,
+            onChange: (category, id, value) => {
+                this.settings[id] = value;
+                Data.save(this._config.info.name, "settings", this.settings);
+            }
+        });
+    }
+
     handleNewQuest() {
         const quest = [...this._questsStore.quests.values()].find(x =>
             x.id !== "1248385850622869556" &&
@@ -141,7 +169,7 @@ class AutoQuestComplete {
             new Date(x.config.expiresAt).getTime() > Date.now()
         );
 
-        if (new_quest && new_quest !== quest) {
+        if (new_quest && new_quest !== quest && this.settings.enableNotify) {
             // UI.showNotice("New quest available! Please accept it to start auto completing.", {
             //     type: "info",
             //     timeout: 5 * 60 * 1000,
