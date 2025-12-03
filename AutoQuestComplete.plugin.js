@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.5.0
+ * @version 0.5.1
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.5.0",
+        version: "0.5.1",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -36,7 +36,7 @@ const config = {
             items: [
                 "Now you can turn on/off notification for new quests",
             ]
-        },
+        }
         // {
         //     title: "Fixes",
         //     type: "fixed",
@@ -144,7 +144,7 @@ class AutoQuestComplete {
         for (const settings of this._config.settingsPanel) {
             settings.value = this.settings[settings.id];
         }
-        
+
         return UI.buildSettingsPanel({
             settings: this._config.settingsPanel,
             onChange: (category, id, value) => {
