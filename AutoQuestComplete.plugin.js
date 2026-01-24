@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.5.2",
+        version: "0.5.3",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -231,9 +231,7 @@ class AutoQuestComplete {
         delete window.$;
 
         let ApplicationStreamingStore = Webpack.Stores.ApplicationStreamingStore;
-        let FluxDispatcher = Object.values(wpRequire.c)
-            .find(x => x?.exports?.h?.__proto__?.flushWaitQueue)
-            ?.exports?.h;
+        // let FluxDispatcher = Webpack.getByKeys('dispatch', 'subscribe', 'register');
         let api = Webpack.getModule(m => m?.Bo?.get)?.Bo;
         let RunningGameStore = Webpack.Stores.RunningGameStore;
 
@@ -305,7 +303,7 @@ class AutoQuestComplete {
                 //games.push(fakeGame);
                 RunningGameStore.getRunningGames = () => fakeGames;
                 RunningGameStore.getGameForPID = (pid) => fakeGames.find(x => x.pid === pid);
-                FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames});
+                //FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames});
                 
                 let fn = data => {
                     let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.PLAY_ON_DESKTOP.value);
@@ -321,11 +319,11 @@ class AutoQuestComplete {
                         // }
                         RunningGameStore.getRunningGames = realGetRunningGames;
                         RunningGameStore.getGameForPID = realGetGameForPID;
-                        FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
-                        FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                       // FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
+                        // FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
                     }
                 };
-                FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                // FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
                 Logger.info(this._config.info.name, `Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/60)} min.`);
                 UI.showToast(`Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/60)} min.`, {type:"info"});
             });
@@ -345,10 +343,10 @@ class AutoQuestComplete {
                     Logger.info(this._config.info.name, "Quest completed!");
                     UI.showToast("Quest completed!", {type:"success"});
                     ApplicationStreamingStore.getStreamerActiveStreamMetadata = this._originalStreamerFunc;
-                    FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                    //FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
                 }
             };
-            FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+            // FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
             Logger.info(this._config.info.name, `Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone)/60)} min. (Need at least one VC peer)`);
             UI.showToast(`Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone)/60)} min. (Need at least one VC peer)`, {type:"info"});
         }
