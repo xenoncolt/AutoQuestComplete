@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.5.1",
+        version: "0.5.2",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -30,21 +30,20 @@ const config = {
         github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
     },
     changelog: [
+        // {
+        //     title: "New Features & Improvements",
+        //     type: "added",
+        //     items: [
+        //         "Now you can turn on/off notification for new quests",
+        //     ]
+        // }
         {
-            title: "New Features & Improvements",
-            type: "added",
+            title: "Fixes",
+            type: "fixed",
             items: [
-                "Now you can turn on/off notification for new quests",
+                "Fixed discord api changes breaking the plugin",
             ]
         }
-        // {
-        //     title: "Fixes",
-        //     type: "fixed",
-        //     items: [
-        //         "Fixed quest reminder not working properly.",
-        //         "Fixed some issues with quest detection."
-        //     ]
-        // },
         // {
         //     title: "Changed Few Things",
         //     type: "changed",
@@ -232,8 +231,10 @@ class AutoQuestComplete {
         delete window.$;
 
         let ApplicationStreamingStore = Webpack.Stores.ApplicationStreamingStore;
-        let FluxDispatcher = Webpack.getByKeys('dispatch', 'subscribe', 'register');
-        let api = Webpack.getModule(m => m?.tn?.get)?.tn;
+        let FluxDispatcher = Object.values(wpRequire.c)
+            .find(x => x?.exports?.h?.__proto__?.flushWaitQueue)
+            ?.exports?.h;
+        let api = Webpack.getModule(m => m?.Bo?.get)?.Bo;
         let RunningGameStore = Webpack.Stores.RunningGameStore;
 
         if (!quest) {
