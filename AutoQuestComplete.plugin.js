@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.5.3",
+        version: "0.5.4",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -41,7 +41,7 @@ const config = {
             title: "Fixes",
             type: "fixed",
             items: [
-                "Fixed discord api changes breaking the plugin",
+                "Fixed module detection using raw webpack require",
             ]
         }
         // {
@@ -230,10 +230,16 @@ class AutoQuestComplete {
     runQuest(quest) {
         delete window.$;
 
-        let ApplicationStreamingStore = Webpack.Stores.ApplicationStreamingStore;
-        // let FluxDispatcher = Webpack.getByKeys('dispatch', 'subscribe', 'register');
-        let api = Webpack.getModule(m => m?.Bo?.get)?.Bo;
-        let RunningGameStore = Webpack.Stores.RunningGameStore;
+        // Get webpack require directly (more reliable than BdApi.Webpack)
+        let wpRequire = webpackChunkdiscord_app.push([[Symbol()], {}, r => r]);
+        webpackChunkdiscord_app.pop();
+
+        let ApplicationStreamingStore = Object.values(wpRequire.c).find(x => x?.exports?.A?.__proto__?.getStreamerActiveStreamMetadata)?.exports?.A;
+        let RunningGameStore = Object.values(wpRequire.c).find(x => x?.exports?.Ay?.getRunningGames)?.exports?.Ay;
+        let FluxDispatcher = Object.values(wpRequire.c).find(x => x?.exports?.h?.__proto__?.flushWaitQueue)?.exports?.h;
+        let api = Object.values(wpRequire.c).find(x => x?.exports?.Bo?.get)?.exports?.Bo;
+        let ChannelStore = Object.values(wpRequire.c).find(x => x?.exports?.A?.__proto__?.getAllThreadsForParent)?.exports?.A;
+        let GuildChannelStore = Object.values(wpRequire.c).find(x => x?.exports?.Ay?.getSFWDefaultChannel)?.exports?.Ay;
 
         if (!quest) {
             Logger.info(this._config.info.name, "No uncompleted quests found.");
@@ -303,7 +309,7 @@ class AutoQuestComplete {
                 //games.push(fakeGame);
                 RunningGameStore.getRunningGames = () => fakeGames;
                 RunningGameStore.getGameForPID = (pid) => fakeGames.find(x => x.pid === pid);
-                //FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames});
+                FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames});
                 
                 let fn = data => {
                     let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.PLAY_ON_DESKTOP.value);
@@ -312,18 +318,13 @@ class AutoQuestComplete {
                     if(progress >= secondsNeeded) {
                         Logger.info(this._config.info.name, "Quest completed!");
                         UI.showToast("Quest completed!", {type:"success"});
-                        // const idx = games.indexOf(fakeGame);
-                        // if(idx > -1) {
-                        //     games.splice(idx, 1);
-                        //     FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: []});
-                        // }
                         RunningGameStore.getRunningGames = realGetRunningGames;
                         RunningGameStore.getGameForPID = realGetGameForPID;
-                       // FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
-                        // FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                        FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
+                        FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
                     }
                 };
-                // FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
                 Logger.info(this._config.info.name, `Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/60)} min.`);
                 UI.showToast(`Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/60)} min.`, {type:"info"});
             });
@@ -343,16 +344,16 @@ class AutoQuestComplete {
                     Logger.info(this._config.info.name, "Quest completed!");
                     UI.showToast("Quest completed!", {type:"success"});
                     ApplicationStreamingStore.getStreamerActiveStreamMetadata = this._originalStreamerFunc;
-                    //FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                    FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
                 }
             };
-            // FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+            FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
             Logger.info(this._config.info.name, `Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone)/60)} min. (Need at least one VC peer)`);
             UI.showToast(`Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone)/60)} min. (Need at least one VC peer)`, {type:"info"});
         }
         else if (taskName === "PLAY_ACTIVITY") {
-            const channelId = Webpack.Stores.ChannelStore.getSortedPrivateChannels()[0]?.id ||
-                Object.values(Webpack.Stores.GuildChannelStore.getAllGuilds()).find(x => x && x.VOCAL.length > 0).VOCAL[0].channel.id;
+            const channelId = ChannelStore.getSortedPrivateChannels()[0]?.id ||
+                Object.values(GuildChannelStore.getAllGuilds()).find(x => x && x.VOCAL.length > 0).VOCAL[0].channel.id;
             const streamKey = `call:${channelId}:1`;
             (async () => {
                 Logger.info(this._config.info.name, "Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
