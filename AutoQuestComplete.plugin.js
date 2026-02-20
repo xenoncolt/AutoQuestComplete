@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.5.4
+ * @version 0.5.5
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.5.4",
+        version: "0.5.5",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -41,7 +41,7 @@ const config = {
             title: "Fixes",
             type: "fixed",
             items: [
-                "Fixed flux dispatcher usages",
+                "Fixed application name parsing for quests that have special characters in their name.",
             ]
         }
         // {
@@ -282,7 +282,7 @@ class AutoQuestComplete {
         else if (taskName === "PLAY_ON_DESKTOP") {
             api.get({url: `/applications/public?application_ids=${this._activeQuestId}`}).then(res => {
                 const appData = res.body[0];
-                const exeName = appData.executables.find(x => x.os === "win32").name.replace(">","");
+                const exeName = appData.executables?.find(x => x.os === "win32")?.name?.replace(">","") ?? appData.name.replace(/[\/\\:*?"<>|]/g, "");
                 const fakeGame = {
                     cmdLine: `C:\\Program Files\\${appData.name}\\${exeName}`,
                     exeName,
