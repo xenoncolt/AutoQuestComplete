@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.5.5
+ * @version 0.5.6
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.5.5",
+        version: "0.5.6",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -38,10 +38,10 @@ const config = {
         //     ]
         // }
         {
-            title: "Fixes",
+            title: "Small Fix",
             type: "fixed",
             items: [
-                "Fixed application name parsing for quests that have special characters in their name.",
+                "Warn users about unsupported quest types instead of just failing to complete them.",
             ]
         }
         // {
@@ -74,6 +74,7 @@ class AutoQuestComplete {
         this._boundNewQuestHandler = this.handleNewQuest.bind(this);
         this._activeQuestId = null;
         this._activeQuestName = null;
+        this._unsupportedQuests = new Set();
         this.settings;
 
         try {
@@ -218,6 +219,7 @@ class AutoQuestComplete {
             !x.userStatus?.completedAt &&
             new Date(x.config.expiresAt).getTime() > Date.now()
         );
+        // Logger.info(this._config.info.name, "Quest: ", quest);
 
         if (quest && quest.config.application.id !== this._activeQuestId) {
             this._activeQuestId = quest.config.application.id;
@@ -242,7 +244,8 @@ class AutoQuestComplete {
         }
 
         const pid = Math.floor(Math.random() * 30000) + 1000;
-        const taskName = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY", "WATCH_VIDEO_ON_MOBILE"]
+        // const tasked = quest.config.taskConfigV2 ?? quest.config.taskConfig;
+        const taskName = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY", "WATCH_VIDEO_ON_MOBILE", "ACHIEVEMENT_IN_ACTIVITY"]
             .find(x => quest.config.taskConfigV2.tasks[x] != null);
         const secondsNeeded = quest.config.taskConfigV2.tasks[taskName].target;
         let secondsDone = quest.userStatus?.progress?.[taskName]?.value ?? 0;
@@ -371,6 +374,16 @@ class AutoQuestComplete {
                 Logger.info(this._config.info.name, "Quest completed!");
                 UI.showToast("Quest completed!", {type:"success"});
             })();
+        }
+        else if (taskName === "ACHIEVEMENT_IN_ACTIVITY") {
+            if (this._unsupportedQuests.has(this._activeQuestId)) return;
+            this._unsupportedQuests.add(this._activeQuestId);
+            UI.showConfirmationModal("Unsupported Quest Task", [`The quest "${this._activeQuestName}" has an unsupported Quest type: ${taskName}.`, "AutoQuestComplete will not be able to complete this quest. Because it's a server-side quest.\n  **Please complete it manually**."], {
+                confirmText: "Go to Quest",
+                onConfirm: async (e) => {
+                    open(`/quests/${quest.id}`);
+                }
+            });
         }
     }
 
