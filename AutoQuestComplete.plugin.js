@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.5.6
+ * @version 0.6.0
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.5.6",
+        version: "0.6.0",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -30,18 +30,18 @@ const config = {
         github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
     },
     changelog: [
-        // {
-        //     title: "New Features & Improvements",
-        //     type: "added",
-        //     items: [
-        //         "Now you can turn on/off notification for new quests",
-        //     ]
-        // }
+        {
+            title: "New Features & Improvements",
+            type: "added",
+            items: [
+                "Added a error reporting modal that allows users to easily report errors to the developer with pre-filled issue.",
+            ]
+        },
         {
             title: "Small Fix",
             type: "fixed",
             items: [
-                "Warn users about unsupported quest types instead of just failing to complete them.",
+                "clear variables when stopping the plugin",
             ]
         }
         // {
@@ -137,7 +137,7 @@ class AutoQuestComplete {
         if (this._questsStore && this._questsStore.removeChangeListener) {
             this._questsStore.removeChangeListener(this._boundHandleQuestChange);
         }
-
+        this._unsupportedQuests.clear();
     }
 
     getSettingsPanel() {
@@ -230,160 +230,172 @@ class AutoQuestComplete {
     }
 
     runQuest(quest) {
-        delete window.$;
+        try {
+            delete window.$;
 
-        let ApplicationStreamingStore = Webpack.Stores.ApplicationStreamingStore;
-        let FluxDispatcher = Webpack.getByKeys('dispatch', 'subscribe', 'register', {searchExports: true});
-        let api = Webpack.getModule(m => m?.Bo?.get)?.Bo;
-        let RunningGameStore = Webpack.Stores.RunningGameStore;
+            let ApplicationStreamingStore = Webpack.Stores.ApplicationStreamingStore;
+            let FluxDispatcher = Webpack.getByKeys('dispatch', 'subscribe', 'register', { searchExports: true });
+            let api = Webpack.getModule(m => m?.Bo?.get)?.Bo;
+            let RunningGameStore = Webpack.Stores.RunningGameStore;
 
-        if (!quest) {
-            Logger.info(this._config.info.name, "No uncompleted quests found.");
-            UI.showToast("No uncompleted quests found.", {type:"info"});
-            return;
-        }
+            if (!quest) {
+                Logger.info(this._config.info.name, "No uncompleted quests found.");
+                UI.showToast("No uncompleted quests found.", { type: "info" });
+                return;
+            }
 
-        const pid = Math.floor(Math.random() * 30000) + 1000;
-        // const tasked = quest.config.taskConfigV2 ?? quest.config.taskConfig;
-        const taskName = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY", "WATCH_VIDEO_ON_MOBILE", "ACHIEVEMENT_IN_ACTIVITY"]
-            .find(x => quest.config.taskConfigV2.tasks[x] != null);
-        const secondsNeeded = quest.config.taskConfigV2.tasks[taskName].target;
-        let secondsDone = quest.userStatus?.progress?.[taskName]?.value ?? 0;
+            const pid = Math.floor(Math.random() * 30000) + 1000;
+            // const tasked = quest.config.taskConfigV2 ?? quest.config.taskConfig;
+            const taskName = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY", "WATCH_VIDEO_ON_MOBILE", "ACHIEVEMENT_IN_ACTIVITY"]
+                .find(x => quest.config.taskConfigV2.tasks[x] != null);
+            const secondsNeeded = quest.config.taskConfigV2.tasks[taskName].target;
+            let secondsDone = quest.userStatus?.progress?.[taskName]?.value ?? 0;
 
-        if (taskName === "WATCH_VIDEO" || taskName === "WATCH_VIDEO_ON_MOBILE") {
-            const maxPreview = 10, speed = 7, intervalTime = 1;
-            const enrolledAt = new Date(quest.userStatus.enrolledAt).getTime();
-            let isFinished = false;
+            if (taskName === "WATCH_VIDEO" || taskName === "WATCH_VIDEO_ON_MOBILE") {
+                const maxPreview = 10, speed = 7, intervalTime = 1;
+                const enrolledAt = new Date(quest.userStatus.enrolledAt).getTime();
+                let isFinished = false;
 
-            (async () => {
-                while (true) {
-                    const maxAllowedTime = Math.floor((Date.now() - enrolledAt)/ 1000) + maxPreview;
-                    const diff = maxAllowedTime - secondsDone;
-                    const timestamp = secondsDone + speed;
+                (async () => {
+                    while (true) {
+                        const maxAllowedTime = Math.floor((Date.now() - enrolledAt) / 1000) + maxPreview;
+                        const diff = maxAllowedTime - secondsDone;
+                        const timestamp = secondsDone + speed;
 
-                    if (diff >= speed) {
-                        const response = await api.post({url: `/quests/${quest.id}/video-progress`, body: {timestamp: Math.min(secondsNeeded, timestamp + Math.random())}});
-                        isFinished = response.body.completed_at != null;
-                        secondsDone = Math.min(secondsNeeded, timestamp);
+                        if (diff >= speed) {
+                            const response = await api.post({ url: `/quests/${quest.id}/video-progress`, body: { timestamp: Math.min(secondsNeeded, timestamp + Math.random()) } });
+                            isFinished = response.body.completed_at != null;
+                            secondsDone = Math.min(secondsNeeded, timestamp);
+                        }
+
+                        if (timestamp >= secondsNeeded) {
+                            break;
+                        }
+                        await new Promise(resolve => setTimeout(resolve, intervalTime * 1000));
                     }
-
-                    if (timestamp >= secondsNeeded) {
-                        break;
+                    if (!isFinished) {
+                        await api.post({ url: `/quests/${quest.id}/video-progress`, body: { timestamp: secondsNeeded } });
                     }
-                    await new Promise(resolve => setTimeout(resolve, intervalTime * 1000));
-                }
-                if (!isFinished) {
-                    await api.post({url: `/quests/${quest.id}/video-progress`, body: {timestamp: secondsNeeded}});
-                }
-                Logger.info(this._config.info.name, "Quest completed!");
-                UI.showToast("Quest completed!", {type:"success"});
-            })();
+                    Logger.info(this._config.info.name, "Quest completed!");
+                    UI.showToast("Quest completed!", { type: "success" });
+                })();
 
-            Logger.info(this._config.info.name, `Spoofing video for ${this._activeQuestName}.`);
-            UI.showToast(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/speed)} sec.`, {type:"info"});
-        }
-        else if (taskName === "PLAY_ON_DESKTOP") {
-            api.get({url: `/applications/public?application_ids=${this._activeQuestId}`}).then(res => {
-                const appData = res.body[0];
-                const exeName = appData.executables?.find(x => x.os === "win32")?.name?.replace(">","") ?? appData.name.replace(/[\/\\:*?"<>|]/g, "");
-                const fakeGame = {
-                    cmdLine: `C:\\Program Files\\${appData.name}\\${exeName}`,
-                    exeName,
-                    exePath: `c:/program files/${appData.name.toLowerCase()}/${exeName}`,
-                    hidden: false,
-                    isLauncher: false,
+                Logger.info(this._config.info.name, `Spoofing video for ${this._activeQuestName}.`);
+                UI.showToast(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / speed)} sec.`, { type: "info" });
+            }
+            else if (taskName === "PLAY_ON_DESKTOP") {
+                api.get({ url: `/applications/public?application_ids=${this._activeQuestId}` }).then(res => {
+                    const appData = res.body[0];
+                    const exeName = appData.executables?.find(x => x.os === "win32")?.name?.replace(">", "") ?? appData.name.replace(/[\/\\:*?"<>|]/g, "");
+                    const fakeGame = {
+                        cmdLine: `C:\\Program Files\\${appData.name}\\${exeName}`,
+                        exeName,
+                        exePath: `c:/program files/${appData.name.toLowerCase()}/${exeName}`,
+                        hidden: false,
+                        isLauncher: false,
+                        id: this._activeQuestId,
+                        name: appData.name,
+                        pid: pid,
+                        pidPath: [pid],
+                        processName: appData.name,
+                        start: Date.now(),
+                    };
+                    const realGames = RunningGameStore.getRunningGames();
+                    const fakeGames = [fakeGame];
+                    const realGetRunningGames = RunningGameStore.getRunningGames;
+                    const realGetGameForPID = RunningGameStore.getGameForPID;
+                    //games.push(fakeGame);
+                    RunningGameStore.getRunningGames = () => fakeGames;
+                    RunningGameStore.getGameForPID = (pid) => fakeGames.find(x => x.pid === pid);
+                    FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames });
+
+                    let fn = data => {
+                        let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.PLAY_ON_DESKTOP.value);
+                        Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
+                        UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
+                        if (progress >= secondsNeeded) {
+                            Logger.info(this._config.info.name, "Quest completed!");
+                            UI.showToast("Quest completed!", { type: "success" });
+                            // const idx = games.indexOf(fakeGame);
+                            // if(idx > -1) {
+                            //     games.splice(idx, 1);
+                            //     FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: []});
+                            // }
+                            RunningGameStore.getRunningGames = realGetRunningGames;
+                            RunningGameStore.getGameForPID = realGetGameForPID;
+                            FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
+                            FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                        }
+                    };
+                    FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                    Logger.info(this._config.info.name, `Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min.`);
+                    UI.showToast(`Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min.`, { type: "info" });
+                });
+            }
+            else if (taskName === "STREAM_ON_DESKTOP") {
+                this._originalStreamerFunc = ApplicationStreamingStore.getStreamerActiveStreamMetadata;
+                ApplicationStreamingStore.getStreamerActiveStreamMetadata = () => ({
                     id: this._activeQuestId,
-                    name: appData.name,
-                    pid: pid,
-                    pidPath: [pid],
-                    processName: appData.name,
-                    start: Date.now(),
-                };
-                const realGames = RunningGameStore.getRunningGames();
-                const fakeGames = [fakeGame];
-                const realGetRunningGames = RunningGameStore.getRunningGames;
-                const realGetGameForPID = RunningGameStore.getGameForPID;
-                //games.push(fakeGame);
-                RunningGameStore.getRunningGames = () => fakeGames;
-                RunningGameStore.getGameForPID = (pid) => fakeGames.find(x => x.pid === pid);
-                FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames});
-                
+                    pid,
+                    sourceName: null
+                });
                 let fn = data => {
-                    let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.PLAY_ON_DESKTOP.value);
+                    let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.STREAM_ON_DESKTOP.value);
                     Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
-                    UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, {type:"info"});
-                    if(progress >= secondsNeeded) {
+                    UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
+                    if (progress >= secondsNeeded) {
                         Logger.info(this._config.info.name, "Quest completed!");
-                        UI.showToast("Quest completed!", {type:"success"});
-                        // const idx = games.indexOf(fakeGame);
-                        // if(idx > -1) {
-                        //     games.splice(idx, 1);
-                        //     FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: []});
-                        // }
-                        RunningGameStore.getRunningGames = realGetRunningGames;
-                        RunningGameStore.getGameForPID = realGetGameForPID;
-                        FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
+                        UI.showToast("Quest completed!", { type: "success" });
+                        ApplicationStreamingStore.getStreamerActiveStreamMetadata = this._originalStreamerFunc;
                         FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
                     }
                 };
                 FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
-                Logger.info(this._config.info.name, `Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/60)} min.`);
-                UI.showToast(`Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone)/60)} min.`, {type:"info"});
-            });
-        }
-        else if (taskName === "STREAM_ON_DESKTOP") {
-            this._originalStreamerFunc = ApplicationStreamingStore.getStreamerActiveStreamMetadata;
-            ApplicationStreamingStore.getStreamerActiveStreamMetadata = () => ({
-                id: this._activeQuestId,
-                pid,
-                sourceName: null
-            });
-            let fn = data => {
-                let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.STREAM_ON_DESKTOP.value);
-                Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
-                UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, {type:"info"});
-                if(progress >= secondsNeeded) {
-                    Logger.info(this._config.info.name, "Quest completed!");
-                    UI.showToast("Quest completed!", {type:"success"});
-                    ApplicationStreamingStore.getStreamerActiveStreamMetadata = this._originalStreamerFunc;
-                    FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
-                }
-            };
-            FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
-            Logger.info(this._config.info.name, `Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone)/60)} min. (Need at least one VC peer)`);
-            UI.showToast(`Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone)/60)} min. (Need at least one VC peer)`, {type:"info"});
-        }
-        else if (taskName === "PLAY_ACTIVITY") {
-            const channelId = Webpack.Stores.ChannelStore.getSortedPrivateChannels()[0]?.id ||
-                Object.values(Webpack.Stores.GuildChannelStore.getAllGuilds()).find(x => x && x.VOCAL.length > 0).VOCAL[0].channel.id;
-            const streamKey = `call:${channelId}:1`;
-            (async () => {
-                Logger.info(this._config.info.name, "Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
-                UI.showToast(`Completing quest ${this._activeQuestName} - ${quest.config.messages.questName}`, {type:"info"});
-                while(true) {
-                    const res = await api.post({url: `/quests/${quest.id}/heartbeat`, body: {stream_key: streamKey, terminal: false}});
-                    const progress = res.body.progress.PLAY_ACTIVITY.value;
-                    Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
-                    UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, {type:"info"});
-                    await new Promise(resolve => setTimeout(resolve, 20000));
-                    if(progress >= secondsNeeded) {
-                        await api.post({url: `/quests/${quest.id}/heartbeat`, body: {stream_key: streamKey, terminal: true}});
-                        break;
+                Logger.info(this._config.info.name, `Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min. (Need at least one VC peer)`);
+                UI.showToast(`Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min. (Need at least one VC peer)`, { type: "info" });
+            }
+            else if (taskName === "PLAY_ACTIVITY") {
+                const channelId = Webpack.Stores.ChannelStore.getSortedPrivateChannels()[0]?.id ||
+                    Object.values(Webpack.Stores.GuildChannelStore.getAllGuilds()).find(x => x && x.VOCAL.length > 0).VOCAL[0].channel.id;
+                const streamKey = `call:${channelId}:1`;
+                (async () => {
+                    Logger.info(this._config.info.name, "Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
+                    UI.showToast(`Completing quest ${this._activeQuestName} - ${quest.config.messages.questName}`, { type: "info" });
+                    while (true) {
+                        const res = await api.post({ url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: false } });
+                        const progress = res.body.progress.PLAY_ACTIVITY.value;
+                        Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
+                        UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
+                        await new Promise(resolve => setTimeout(resolve, 20000));
+                        if (progress >= secondsNeeded) {
+                            await api.post({ url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: true } });
+                            break;
+                        }
                     }
-                }
-                Logger.info(this._config.info.name, "Quest completed!");
-                UI.showToast("Quest completed!", {type:"success"});
-            })();
-        }
-        else if (taskName === "ACHIEVEMENT_IN_ACTIVITY") {
-            if (this._unsupportedQuests.has(this._activeQuestId)) return;
-            this._unsupportedQuests.add(this._activeQuestId);
-            UI.showConfirmationModal("Unsupported Quest Task", [`The quest "${this._activeQuestName}" has an unsupported Quest type: ${taskName}.`, "AutoQuestComplete will not be able to complete this quest. Because it's a server-side quest.\n  **Please complete it manually**."], {
-                confirmText: "Go to Quest",
+                    Logger.info(this._config.info.name, "Quest completed!");
+                    UI.showToast("Quest completed!", { type: "success" });
+                })();
+            }
+            else if (taskName === "ACHIEVEMENT_IN_ACTIVITY") {
+                if (this._unsupportedQuests.has(this._activeQuestId)) return;
+                this._unsupportedQuests.add(this._activeQuestId);
+                UI.showConfirmationModal("Unsupported Quest Task", [`The quest "${this._activeQuestName}" has an unsupported Quest type: ${taskName}.`, "AutoQuestComplete will not be able to complete this quest. Because it's a server-side quest.\n  **Please complete it manually**."], {
+                    confirmText: "Go to Quest",
+                    onConfirm: async (e) => {
+                        open(`/quests/${quest.id}`);
+                    }
+                });
+            }
+        } catch (err) {
+            UI.showConfirmationModal("Error", ["An error occurred while trying to complete the quest. Please reach out to developer with the following information:", `Quest Name: ${this._activeQuestName}`, `Error: ${err.message}`, `Or click to send report to create an issue on github`], {
+                confirmText: "Report Issue",
                 onConfirm: async (e) => {
-                    open(`/quests/${quest.id}`);
-                }
-            });
+                    const issueTitle = encodeURIComponent(`Error while completing quest: ${this._activeQuestName}`);
+                    const issueBody = encodeURIComponent(`**Quest Name:** ${this._activeQuestName}\n**Error:** ${e.message}\n**Stack Trace:**\n\`\`\`${e.stack}\`\`\``);
+                    const issueUrl = `https://github.com/xenoncolt/AutoQuestComplete/issues/new?title=${issueTitle}&body=${issueBody}`;
+                    open(issueUrl);
+                },
+            })
         }
     }
 
