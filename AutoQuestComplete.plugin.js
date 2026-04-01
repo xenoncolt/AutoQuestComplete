@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.6.0
+ * @version 0.6.1
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.6.0",
+        version: "0.6.1",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -30,18 +30,18 @@ const config = {
         github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
     },
     changelog: [
-        {
-            title: "New Features & Improvements",
-            type: "added",
-            items: [
-                "Added a error reporting modal that allows users to easily report errors to the developer with pre-filled issue.",
-            ]
-        },
+        // {
+        //     title: "New Features & Improvements",
+        //     type: "added",
+        //     items: [
+        //         "Added a error reporting modal that allows users to easily report errors to the developer with pre-filled issue.",
+        //     ]
+        // },
         {
             title: "Small Fix",
             type: "fixed",
             items: [
-                "clear variables when stopping the plugin",
+                "Now the plugin will be directed to the quests page and highlight the new quest instead of opening a browser",
             ]
         }
         // {
@@ -169,7 +169,7 @@ class AutoQuestComplete {
             new Date(x.config.expiresAt).getTime() > Date.now()
         );
 
-        if (new_quest && new_quest !== quest && this.settings.enableNotify) {
+        if (new_quest !== quest && this.settings.enableNotify) {
             // UI.showNotice("New quest available! Please accept it to start auto completing.", {
             //     type: "info",
             //     timeout: 5 * 60 * 1000,
@@ -188,6 +188,62 @@ class AutoQuestComplete {
 
     showQuestNotification(quest, reminder = false) {
         const title = reminder ? `Reminder: New Quest Available!` : `New Quest Available!`;
+        const openQuests = () => {
+            try {
+                const quest_link = document.querySelector('a[href="/quest-home"]');
+
+                if (quest_link) {
+                    quest_link.click();
+                    return;
+                }
+
+                // fallback navigation if sidebar link is not yet rendered
+                window.history.pushState({}, "", "/quest-home");
+                window.dispatchEvent(new PopStateEvent("popstate"));
+
+            } catch (err) {
+                Logger.error(this._config.info.name, "Failed to open quests page", err);
+            }
+        };
+        const focusQuestContainer = () => {
+            const quest_title_id = `quest-tile-${quest.id}`;
+            let attempts = 0;
+
+            const highlight_container = () => {
+                const quest_container = document.getElementById(quest_title_id);
+
+                if (!quest_container) {
+                    if (attempts++ < 20) {
+                        setTimeout(highlight_container, 250);
+                    }
+                    return;
+                }
+
+                quest_container.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+                quest_container.setAttribute("tabindex", "-1");
+                quest_container.focus({ preventScroll: true });
+
+                const originalOutline = quest_container.style.outline;
+                const originalOutlineOffset = quest_container.style.outlineOffset;
+                const originalBoxShadow = quest_container.style.boxShadow;
+                const originalTransition = quest_container.style.transition;
+
+                quest_container.style.transition = "box-shadow 180ms ease, outline 180ms ease";
+                quest_container.style.outline = "3px solid rgba(88, 101, 242, 0.95)";
+                quest_container.style.outlineOffset = "6px";
+                quest_container.style.boxShadow = "0 0 0 8px rgba(88, 101, 242, 0.2)";
+
+                setTimeout(() => {
+                    if (!quest_container.isConnected) return;
+                    quest_container.style.outline = originalOutline;
+                    quest_container.style.outlineOffset = originalOutlineOffset;
+                    quest_container.style.boxShadow = originalBoxShadow;
+                    quest_container.style.transition = originalTransition;
+                }, 5000);
+            };
+
+            setTimeout(highlight_container, 250);
+        };
         UI.showNotification({
             title: title,
             content: `Please accept the quest "${quest.config.application.name}" to start auto completing.`,
@@ -197,7 +253,8 @@ class AutoQuestComplete {
                 {
                     label: "Go to Quests",
                     onClick: () => {
-                        open(`/quests/${quest.id}`);
+                        openQuests();
+                        focusQuestContainer();
                     }
                 },
                 {
