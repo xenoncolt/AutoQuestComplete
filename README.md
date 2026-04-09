@@ -1,3 +1,12 @@
+> [!CAUTION]
+> As of April 7th 2026, Discord has expressed their intent to crack down on automating quest completion.
+> 
+> Some users have received the following system message:
+> 
+> <img width="836" height="272" alt="image" src="https://github.com/user-attachments/assets/2a9604d7-0a05-44e9-ab2a-ce0490660cb1" />
+> 
+> Use the script at your own risk. You most likely WILL get flagged by doing so.
+
 # AutoQuestComplete
  A BetterDiscord plugin which automatically completes quests for you.
 
