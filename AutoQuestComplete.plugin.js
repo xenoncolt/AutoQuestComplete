@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.6.1
+ * @version 0.6.2
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.6.1",
+        version: "0.6.2",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -37,21 +37,21 @@ const config = {
         //         "Added a error reporting modal that allows users to easily report errors to the developer with pre-filled issue.",
         //     ]
         // },
-        {
-            title: "Small Fix",
-            type: "fixed",
-            items: [
-                "Now the plugin will be directed to the quests page and highlight the new quest instead of opening a browser",
-            ]
-        }
         // {
-        //     title: "Changed Few Things",
-        //     type: "changed",
+        //     title: "Small Fix",
+        //     type: "fixed",
         //     items: [
-        //         "Updated to use new BetterDiscord APIs.",
-        //         "Old update notification method replaced with new Notification API."
+        //         "Now the plugin will be directed to the quests page and highlight the new quest instead of opening a browser",
         //     ]
         // }
+        {
+            title: "Big Change And Warnings",
+            type: "changed",
+            items: [
+                "As of April 7th 2026, Discord has expressed their intent to crack down on automating quest completion. Use the script at your own risk. You most likely WILL get flagged by doing so. Read here https://github.com/xenoncolt/AutoQuestComplete/blob/main/README.md",
+                "Slower the video spoofing speed to reduce the risk of being flagged."
+            ]
+        }
     ],
     settingsPanel: [
         {
@@ -309,26 +309,25 @@ class AutoQuestComplete {
             let secondsDone = quest.userStatus?.progress?.[taskName]?.value ?? 0;
 
             if (taskName === "WATCH_VIDEO" || taskName === "WATCH_VIDEO_ON_MOBILE") {
-                const maxPreview = 10, speed = 7, intervalTime = 1;
+                const speed = 7;
                 const enrolledAt = new Date(quest.userStatus.enrolledAt).getTime();
                 let isFinished = false;
 
                 (async () => {
                     while (true) {
-                        const maxAllowedTime = Math.floor((Date.now() - enrolledAt) / 1000) + maxPreview;
-                        const diff = maxAllowedTime - secondsDone;
+                        const remain = Math.min(speed, secondsNeeded - secondsDone);
+                        await new Promise(resolve => setTimeout(resolve, remain * 1000));
                         const timestamp = secondsDone + speed;
 
-                        if (diff >= speed) {
+
                             const response = await api.post({ url: `/quests/${quest.id}/video-progress`, body: { timestamp: Math.min(secondsNeeded, timestamp + Math.random()) } });
                             isFinished = response.body.completed_at != null;
                             secondsDone = Math.min(secondsNeeded, timestamp);
-                        }
+
 
                         if (timestamp >= secondsNeeded) {
                             break;
                         }
-                        await new Promise(resolve => setTimeout(resolve, intervalTime * 1000));
                     }
                     if (!isFinished) {
                         await api.post({ url: `/quests/${quest.id}/video-progress`, body: { timestamp: secondsNeeded } });
