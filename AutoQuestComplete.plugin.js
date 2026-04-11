@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.6.3
+ * @version 0.6.4
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.6.3",
+        version: "0.6.4",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -41,7 +41,7 @@ const config = {
             title: "Small Fix",
             type: "fixed",
             items: [
-                "Ignore unsupported quests and start next supported quest",
+                "Fix where running plugin will disconnect you sometime",
             ]
         }
         // {
@@ -169,7 +169,7 @@ class AutoQuestComplete {
             new Date(x.config.expiresAt).getTime() > Date.now()
         );
 
-        if (new_quest !== quest && this.settings.enableNotify) {
+        if (new_quest && quest && new_quest !== quest && this.settings.enableNotify) {
             // UI.showNotice("New quest available! Please accept it to start auto completing.", {
             //     type: "info",
             //     timeout: 5 * 60 * 1000,
@@ -187,6 +187,7 @@ class AutoQuestComplete {
     }
 
     showQuestNotification(quest, reminder = false) {
+        if (!quest) return;
         const title = reminder ? `Reminder: New Quest Available!` : `New Quest Available!`;
         const openQuests = () => {
             try {
