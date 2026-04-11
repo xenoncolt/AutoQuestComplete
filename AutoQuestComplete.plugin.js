@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.6.2
+ * @version 0.6.3
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.6.2",
+        version: "0.6.3",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -37,21 +37,21 @@ const config = {
         //         "Added a error reporting modal that allows users to easily report errors to the developer with pre-filled issue.",
         //     ]
         // },
-        // {
-        //     title: "Small Fix",
-        //     type: "fixed",
-        //     items: [
-        //         "Now the plugin will be directed to the quests page and highlight the new quest instead of opening a browser",
-        //     ]
-        // }
         {
-            title: "Big Change And Warnings",
-            type: "changed",
+            title: "Small Fix",
+            type: "fixed",
             items: [
-                "As of April 7th 2026, Discord has expressed their intent to crack down on automating quest completion. Use the script at your own risk. You most likely WILL get flagged by doing so. Read here https://github.com/xenoncolt/AutoQuestComplete/blob/main/README.md",
-                "Slower the video spoofing speed to reduce the risk of being flagged."
+                "Ignore unsupported quests and start next supported quest",
             ]
         }
+        // {
+        //     title: "Big Change And Warnings",
+        //     type: "changed",
+        //     items: [
+        //         "As of April 7th 2026, Discord has expressed their intent to crack down on automating quest completion. Use the script at your own risk. You most likely WILL get flagged by doing so. Read here https://github.com/xenoncolt/AutoQuestComplete/blob/main/README.md",
+        //         "Slower the video spoofing speed to reduce the risk of being flagged."
+        //     ]
+        // }
     ],
     settingsPanel: [
         {
@@ -271,7 +271,7 @@ class AutoQuestComplete {
 
     handleQuestChange() {
         const quest = [...this._questsStore.quests.values()].find(x =>
-            x.id !== "1248385850622869556" &&
+            x.id !== "1248385850622869556" &&  !this._unsupportedQuests.has(x.config.application.id) &&
             x.userStatus?.enrolledAt &&
             !x.userStatus?.completedAt &&
             new Date(x.config.expiresAt).getTime() > Date.now()
@@ -441,6 +441,7 @@ class AutoQuestComplete {
                         open(`/quests/${quest.id}`);
                     }
                 });
+                setTimeout(() => this.handleQuestChange(), 5000);
             }
         } catch (err) {
             UI.showConfirmationModal("Error", ["An error occurred while trying to complete the quest. Please reach out to developer with the following information:", `Quest Name: ${this._activeQuestName}`, `Error: ${err.message}`, `Or click to send report to create an issue on github`], {
