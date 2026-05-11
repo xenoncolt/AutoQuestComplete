@@ -75,6 +75,8 @@ class AutoQuestComplete {
         this._activeQuestId = null;
         this._activeQuestName = null;
         this._unsupportedQuests = new Set();
+        this._notifiedQuests = new Set();
+        this._snoozeTimers = new Map();
         this.settings;
 
         try {
@@ -136,7 +138,13 @@ class AutoQuestComplete {
     stop() {
         if (this._questsStore && this._questsStore.removeChangeListener) {
             this._questsStore.removeChangeListener(this._boundHandleQuestChange);
+            this._questsStore.removeChangeListener(this._boundNewQuestHandler);
         }
+        for (const timer of this._snoozeTimers.values()) {
+            clearTimeout(timer);
+        }
+        this._snoozeTimers.clear();
+        this._notifiedQuests.clear();
         this._unsupportedQuests.clear();
     }
 
@@ -169,7 +177,26 @@ class AutoQuestComplete {
             new Date(x.config.expiresAt).getTime() > Date.now()
         );
 
-        if (new_quest && quest && new_quest !== quest && this.settings.enableNotify) {
+        // Clean up notified IDs for quests that are no longer "new" (accepted, completed or expired)
+        for (const id of this._notifiedQuests) {
+            const stillPending = [...this._questsStore.quests.values()].some(x =>
+                x.id === id &&
+                !x.userStatus?.enrolledAt &&
+                !x.userStatus?.completedAt &&
+                new Date(x.config.expiresAt).getTime() > Date.now()
+            );
+            if (!stillPending) {
+                this._notifiedQuests.delete(id);
+                const timer = this._snoozeTimers.get(id);
+                if (timer) {
+                    clearTimeout(timer);
+                    this._snoozeTimers.delete(id);
+                }
+            }
+        }
+
+        if (new_quest && quest && new_quest !== quest && this.settings.enableNotify && !this._notifiedQuests.has(new_quest.id)) {
+            this._notifiedQuests.add(new_quest.id);
             // UI.showNotice("New quest available! Please accept it to start auto completing.", {
             //     type: "info",
             //     timeout: 5 * 60 * 1000,
@@ -261,9 +288,13 @@ class AutoQuestComplete {
                 {
                     label: "Remind Me Later",
                     onClick: () => {
-                        setTimeout(() => {
+                        const existing = this._snoozeTimers.get(quest.id);
+                        if (existing) clearTimeout(existing);
+                        const timer = setTimeout(() => {
+                            this._snoozeTimers.delete(quest.id);
                             this.showQuestNotification(quest, true);
                         }, 60 * 60 * 1000);
+                        this._snoozeTimers.set(quest.id, timer);
                     }
                 }
             ]
