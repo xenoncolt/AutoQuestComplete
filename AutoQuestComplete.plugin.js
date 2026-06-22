@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.6.4",
+        version: "0.6.5",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -38,10 +38,11 @@ const config = {
         //     ]
         // },
         {
-            title: "Small Fix",
+            title: "Fix",
             type: "fixed",
             items: [
-                "Fix where running plugin will disconnect you sometime",
+                "Fix where quest notification keeps showing again - unaipalma",
+                "Fix the Report issue button - Moonl1qht"
             ]
         }
         // {
@@ -75,6 +76,8 @@ class AutoQuestComplete {
         this._activeQuestId = null;
         this._activeQuestName = null;
         this._unsupportedQuests = new Set();
+        this._notifiedQuests = new Set();
+        this._remindersTime = new Map();
         this.settings;
 
         try {
@@ -137,7 +140,12 @@ class AutoQuestComplete {
         if (this._questsStore && this._questsStore.removeChangeListener) {
             this._questsStore.removeChangeListener(this._boundHandleQuestChange);
         }
+        for (const [questId, timeout] of this._remindersTime.entries()) {
+            clearTimeout(timeout);
+        }
         this._unsupportedQuests.clear();
+        this._notifiedQuests.clear();
+        this._remindersTime.clear();
     }
 
     getSettingsPanel() {
@@ -169,7 +177,7 @@ class AutoQuestComplete {
             new Date(x.config.expiresAt).getTime() > Date.now()
         );
 
-        if (new_quest && quest && new_quest !== quest && this.settings.enableNotify) {
+        if (new_quest && quest && new_quest !== quest && this.settings.enableNotify && !this._notifiedQuests.has(new_quest.config.application.id)) {
             // UI.showNotice("New quest available! Please accept it to start auto completing.", {
             //     type: "info",
             //     timeout: 5 * 60 * 1000,
@@ -182,6 +190,7 @@ class AutoQuestComplete {
             //         }
             //     ]
             // });
+            this._notifiedQuests.add(new_quest.config.application.id);
             this.showQuestNotification(new_quest);
         }
     }
@@ -261,9 +270,13 @@ class AutoQuestComplete {
                 {
                     label: "Remind Me Later",
                     onClick: () => {
-                        setTimeout(() => {
+                        const existing_reminder = this._remindersTime.get(quest.config.application.id);
+                        if (existing_reminder) clearTimeout(existing_reminder);
+                        const reminderTimeout = setTimeout(() => {
+                            this._remindersTime.delete(quest.config.application.id);
                             this.showQuestNotification(quest, true);
                         }, 60 * 60 * 1000);
+                        this._remindersTime.set(quest.config.application.id, reminderTimeout);
                     }
                 }
             ]
@@ -300,6 +313,15 @@ class AutoQuestComplete {
                 Logger.info(this._config.info.name, "No uncompleted quests found.");
                 UI.showToast("No uncompleted quests found.", { type: "info" });
                 return;
+            }
+
+            if (this._remindersTime.has(quest.config.application.id)) {
+                clearTimeout(this._remindersTime.get(quest.config.application.id));
+                this._remindersTime.delete(quest.config.application.id);
+            }
+
+            if (this._notifiedQuests.has(quest.config.application.id)) {
+                this._notifiedQuests.delete(quest.config.application.id);
             }
 
             const pid = Math.floor(Math.random() * 30000) + 1000;
@@ -447,9 +469,9 @@ class AutoQuestComplete {
         } catch (err) {
             UI.showConfirmationModal("Error", ["An error occurred while trying to complete the quest. Please reach out to developer with the following information:", `Quest Name: ${this._activeQuestName}`, `Error: ${err.message}`, `Or click to send report to create an issue on github`], {
                 confirmText: "Report Issue",
-                onConfirm: async (e) => {
+                onConfirm: async () => {
                     const issueTitle = encodeURIComponent(`Error while completing quest: ${this._activeQuestName}`);
-                    const issueBody = encodeURIComponent(`**Quest Name:** ${this._activeQuestName}\n**Error:** ${e.message}\n**Stack Trace:**\n\`\`\`${e.stack}\`\`\``);
+                    const issueBody = encodeURIComponent(`**Quest Name:** ${this._activeQuestName}\n**Error:** ${err.message}\n**Stack Trace:**\n\`\`\`${err.stack}\`\`\``);
                     const issueUrl = `https://github.com/xenoncolt/AutoQuestComplete/issues/new?title=${issueTitle}&body=${issueBody}`;
                     open(issueUrl);
                 },
