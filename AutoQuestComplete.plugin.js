@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.6.5
+ * @version 0.7.0
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.live",
-        version: "0.6.5",
+        version: "0.7.0",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -30,21 +30,22 @@ const config = {
         github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
     },
     changelog: [
-        // {
-        //     title: "New Features & Improvements",
-        //     type: "added",
-        //     items: [
-        //         "Added a error reporting modal that allows users to easily report errors to the developer with pre-filled issue.",
-        //     ]
-        // },
         {
-            title: "Fix",
-            type: "fixed",
+            title: "New Features & Improvements",
+            type: "added",
             items: [
-                "Fix where quest notification keeps showing again - unaipalma",
-                "Fix the Report issue button - Moonl1qht"
+                "Notification reward filter now lets you pick exactly which reward types (Orbs, Redeemable Codes, In-Game Items, Collectibles, Nitro Trials) trigger a notification... just toggle off the ones you don't care about - TouhouJevil",
+                "New quest notifications now show the quest's reward so you know what you're getting before opening it."
             ]
         }
+        // {
+        //     title: "Fix",
+        //     type: "fixed",
+        //     items: [
+        //         "Fix where quest notification keeps showing again - unaipalma",
+        //         "Fix the Report issue button - Moonl1qht"
+        //     ]
+        // }
         // {
         //     title: "Big Change And Warnings",
         //     type: "changed",
@@ -61,6 +62,50 @@ const config = {
             name: "New Quest Notification",
             note: "Enable/Disable notification when a new quest is available.",
             value: true
+        },
+        {
+            type: "category",
+            id: "notifyRewardTypes",
+            name: "Notification Reward Types", // thanks to discord.food
+            collapsible: true,
+            shown: true,
+            settings: [
+                {
+                    type: "switch",
+                    id: 4, // VIRTUAL_CURRENCY
+                    name: "Orbs",
+                    note: "Notify for quests that reward Discord Orbs.",
+                    value: true
+                },
+                {
+                    type: "switch",
+                    id: 1, // REWARD_CODE
+                    name: "Redeemable Code",
+                    note: "Notify for quests that reward a redeemable in-game code.",
+                    value: true
+                },
+                {
+                    type: "switch",
+                    id: 2, // IN_GAME
+                    name: "In-Game Reward",
+                    note: "Notify for quests that reward an item directly in the promoted game.",
+                    value: true
+                },
+                {
+                    type: "switch", 
+                    id: 3, // COLLECTIBLE
+                    name: "Collectible",
+                    note: "Notify for quests that reward a Discord collectible (e.g. an avatar decoration).",
+                    value: true
+                },
+                {
+                    type: "switch",
+                    id: 5, // FRACTIONAL_PREMIUM
+                    name: "Nitro Trial",
+                    note: "Notify for quests that reward a free Nitro (premium) trial.",
+                    value: true
+                }
+            ]
         }
     ]
 }
@@ -109,10 +154,11 @@ class AutoQuestComplete {
     }
 
     start() {
-        this.settings = Data.load(this._config.info.name, "settings") || this._config.settingsPanel.reduce((acc, setting) => {
+        const defaultSettings = this._flattenSettings().reduce((acc, setting) => {
             acc[setting.id] = setting.value;
             return acc;
         }, {});
+        this.settings = Object.assign(defaultSettings, Data.load(this._config.info.name, "settings") || {});
         try {
             if (this._questsStore && this._questsStore.addChangeListener) {
                 this._questsStore.addChangeListener(this._boundHandleQuestChange);
@@ -148,9 +194,17 @@ class AutoQuestComplete {
         this._remindersTime.clear();
     }
 
+    _flattenSettings(settings = this._config.settingsPanel) {
+        return settings.flatMap(setting =>
+            setting.type === "category" && Array.isArray(setting.settings)
+                ? this._flattenSettings(setting.settings)
+                : [setting]
+        );
+    }
+
     getSettingsPanel() {
-        for (const settings of this._config.settingsPanel) {
-            settings.value = this.settings[settings.id];
+        for (const setting of this._flattenSettings()) {
+            setting.value = this.settings[setting.id];
         }
 
         return UI.buildSettingsPanel({
@@ -160,6 +214,23 @@ class AutoQuestComplete {
                 Data.save(this._config.info.name, "settings", this.settings);
             }
         });
+    }
+
+    getQuestRewards(quest) {
+        return quest?.config?.rewardsConfig?.rewards ?? [];
+    }
+
+    shouldNotifyForQuest(quest) {
+        const rewards = this.getQuestRewards(quest);
+        // If cant read any reward info not suppress the notification
+        if (!rewards.length) return true;
+        // future types  -> notify so nothing is silently hidden
+        return rewards.some(reward => this.settings[reward?.type] !== false);
+    }
+
+    getRewardName(quest) {
+        const names = this.getQuestRewards(quest).map(reward => reward?.messages?.name).filter(Boolean);
+        return names.length ? names.join(", ") : null;
     }
 
     handleNewQuest() {
@@ -178,6 +249,7 @@ class AutoQuestComplete {
         );
 
         if (new_quest && quest && new_quest !== quest && this.settings.enableNotify && !this._notifiedQuests.has(new_quest.config.application.id)) {
+            if (!this.shouldNotifyForQuest(new_quest)) return;
             // UI.showNotice("New quest available! Please accept it to start auto completing.", {
             //     type: "info",
             //     timeout: 5 * 60 * 1000,
@@ -254,9 +326,10 @@ class AutoQuestComplete {
 
             setTimeout(highlight_container, 250);
         };
+        const rewardName = this.getRewardName(quest);
         UI.showNotification({
             title: title,
-            content: `Please accept the quest "${quest.config.application.name}" to start auto completing.`,
+            content: `Please accept the quest "${quest.config.application.name}"${rewardName ? ` (Reward: ${rewardName})` : ""} to start auto completing.`,
             type: "info",
             duration: 5 * 60 * 1000,
             actions: [
