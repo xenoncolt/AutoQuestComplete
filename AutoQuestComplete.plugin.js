@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.7.0
+ * @version 0.8.0
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -14,15 +14,14 @@ const config = {
     info: {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
-        website: "https://xenoncolt.live",
-        version: "0.7.0",
+        website: "https://xenoncolt.dev",
+        version: "0.8.0",
         description: "Automatically completes quests for you",
         author: [
             {
                 name: "@aamiaa",
                 plugin_author: "Xenon Colt",
                 github_username: "xenoncolt",
-                link: "https://xenoncolt.live"
             }
         ],
         github: "https://github.com/xenoncolt/AutoQuestComplete",
@@ -34,8 +33,8 @@ const config = {
             title: "New Features & Improvements",
             type: "added",
             items: [
-                "Notification reward filter now lets you pick exactly which reward types (Orbs, Redeemable Codes, In-Game Items, Collectibles, Nitro Trials) trigger a notification... just toggle off the ones you don't care about - TouhouJevil",
-                "New quest notifications now show the quest's reward so you know what you're getting before opening it."
+                "Quest notifications now show the game icon, reward (with the Nitro orb bonus), task type & time, publisher, and how soon the quest expires - so you know what you're getting before opening it.",
+                "Quests now load in the background automatically, so you get notified without having to open the Quests page first."
             ]
         }
         // {
@@ -68,7 +67,7 @@ const config = {
             id: "notifyRewardTypes",
             name: "Notification Reward Types", // thanks to discord.food
             collapsible: true,
-            shown: true,
+            shown: false,
             settings: [
                 {
                     type: "switch",
@@ -110,7 +109,7 @@ const config = {
     ]
 }
 
-const { Webpack, UI, Logger, Data, Utils } = BdApi;
+const { Webpack, UI, Logger, Data, Utils, React } = BdApi;
 
 class AutoQuestComplete {
     constructor() {
@@ -164,6 +163,7 @@ class AutoQuestComplete {
                 this._questsStore.addChangeListener(this._boundHandleQuestChange);
                 this._questsStore.addChangeListener(this._boundNewQuestHandler);
             }
+
             const quest = [...this._questsStore.quests.values()].find(x =>
                 x.id !== "1248385850622869556" &&
                 x.userStatus?.enrolledAt &&
@@ -185,6 +185,7 @@ class AutoQuestComplete {
     stop() {
         if (this._questsStore && this._questsStore.removeChangeListener) {
             this._questsStore.removeChangeListener(this._boundHandleQuestChange);
+            this._questsStore.removeChangeListener(this._boundNewQuestHandler);
         }
         for (const [questId, timeout] of this._remindersTime.entries()) {
             clearTimeout(timeout);
@@ -222,15 +223,99 @@ class AutoQuestComplete {
 
     shouldNotifyForQuest(quest) {
         const rewards = this.getQuestRewards(quest);
-        // If cant read any reward info not suppress the notification
         if (!rewards.length) return true;
-        // future types  -> notify so nothing is silently hidden
         return rewards.some(reward => this.settings[reward?.type] !== false);
     }
 
-    getRewardName(quest) {
-        const names = this.getQuestRewards(quest).map(reward => reward?.messages?.name).filter(Boolean);
-        return names.length ? names.join(", ") : null;
+    getRewardText(quest) {
+        const parts = this.getQuestRewards(quest).map(reward => {
+            if (typeof reward?.orbQuantity === "number" && reward.orbQuantity > 0) {
+                return reward.premiumOrbQuantity && reward.premiumOrbQuantity !== reward.orbQuantity 
+                ? `${reward.orbQuantity} Orbs (${reward.premiumOrbQuantity} with Nitro)` : `${reward.orbQuantity} Orbs`;
+            }
+            return reward?.messages?.name;
+        }).filter(Boolean);
+
+        return parts.length ? parts.join(", ") : null;
+    }
+
+    getQuestTaskInfo(quest) {
+        const tasks = quest?.config?.taskConfigV2?.tasks ?? {};
+        const labels = {
+            WATCH_VIDEO: "Watch a video",
+            WATCH_VIDEO_ON_MOBILE: "Watch a video (mobile)",
+            PLAY_ON_DESKTOP: "Play the game",
+            STREAM_ON_DESKTOP: "Stream the game",
+            PLAY_ACTIVITY: "Play an activity",
+            ACHIEVEMENT_IN_ACTIVITY: "Earn an achievement"
+        };
+        const taskName = Object.keys(labels).find(x => tasks[x] != null);
+        if (!taskName) return null;
+        const seconds = tasks[taskName]?.target ?? 0;
+        if (!seconds) return labels[taskName];
+        const duration = seconds >= 60 ? `${Math.round(seconds / 60)} min` : `${seconds} sec`;
+        return `${labels[taskName]} (~${duration})`;
+    }
+
+    formatRelativeTime(dateStr) {
+        const ms = new Date(dateStr).getTime() - Date.now();
+        if (!Number.isFinite(ms) || ms <= 0) return null;
+        const minutes = Math.floor(ms / 60000);
+        const days = Math.floor(minutes / 1440);
+        const hours = Math.floor((minutes % 1440) / 60);
+        if (days > 0) return `${days}d ${hours}h`;
+        if (hours > 0) return `${hours}h ${minutes % 60}m`;
+        return `${minutes}m`;
+    }
+
+    getQuestIconUrl(quest) {
+        const assets = quest?.config?.assets ?? {};
+        const file = assets.gameTileLight || assets.gameTileDark || assets.logotypeLight;
+        if (!file) return null;
+        return `https://cdn.discordapp.com/${file}`;
+    }
+
+    buildQuestIcon(quest) {
+        const url = this.getQuestIconUrl(quest);
+        if (!url || !React) return undefined;
+        return () => React.createElement("img", {
+            src: url,
+            width: 36,
+            height: 36,
+            style: { borderRadius: "8px", objectFit: "cover" },
+            onError: (event) => { event.currentTarget.style.display = "none"; }
+        });
+    }
+
+    buildNotificationContent(quest) {
+        const intro = `Accept "${quest.config.application.name}" to start auto-completing.`;
+        const reward = this.getRewardText(quest);
+        const task = this.getQuestTaskInfo(quest);
+        const publisher = quest?.config?.messages?.gamePublisher;
+        const expiresIn = this.formatRelativeTime(quest?.config?.expiresAt);
+
+        if (!React) {
+            return [intro,
+                reward && `Reward: ${reward}`,
+                task && `Task: ${task}`,
+                publisher && `Publisher: ${publisher}`,
+                expiresIn && `Expires in ${expiresIn}`
+            ].filter(Boolean).join(" • ");
+        }
+
+        const e = React.createElement;
+        const row = (label, value) => value
+            ? e("div", { style: { opacity: 0.95 } },
+                e("strong", null, `${label}: `), value)
+            : null;
+
+        return e("div", { style: { display: "flex", flexDirection: "column", gap: "3px" } },
+            e("div", { style: { marginBottom: "2px" } }, intro),
+            row("Reward", reward),
+            row("Task", task),
+            row("Publisher", publisher),
+            row("Expires in", expiresIn)
+        );
     }
 
     handleNewQuest() {
@@ -248,7 +333,7 @@ class AutoQuestComplete {
             new Date(x.config.expiresAt).getTime() > Date.now()
         );
 
-        if (new_quest && quest && new_quest !== quest && this.settings.enableNotify && !this._notifiedQuests.has(new_quest.config.application.id)) {
+        if (new_quest && new_quest !== quest && this.settings.enableNotify && !this._notifiedQuests.has(new_quest.config.application.id)) {
             if (!this.shouldNotifyForQuest(new_quest)) return;
             // UI.showNotice("New quest available! Please accept it to start auto completing.", {
             //     type: "info",
@@ -279,7 +364,7 @@ class AutoQuestComplete {
                     return;
                 }
 
-                // fallback navigation if sidebar link is not yet rendered
+                // fallback
                 window.history.pushState({}, "", "/quest-home");
                 window.dispatchEvent(new PopStateEvent("popstate"));
 
@@ -326,10 +411,10 @@ class AutoQuestComplete {
 
             setTimeout(highlight_container, 250);
         };
-        const rewardName = this.getRewardName(quest);
         UI.showNotification({
             title: title,
-            content: `Please accept the quest "${quest.config.application.name}"${rewardName ? ` (Reward: ${rewardName})` : ""} to start auto completing.`,
+            content: this.buildNotificationContent(quest),
+            icon: this.buildQuestIcon(quest),
             type: "info",
             duration: 5 * 60 * 1000,
             actions: [
