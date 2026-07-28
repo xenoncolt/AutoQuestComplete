@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.8.0
+ * @version 0.9.0
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.dev",
-        version: "0.8.0",
+        version: "0.9.0",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -29,30 +29,28 @@ const config = {
         github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
     },
     changelog: [
+        // {
+        //     title: "New Features & Improvements",
+        //     type: "added",
+        //     items: [
+        //         "Quest notifications now show the game icon, reward (with the Nitro orb bonus), task type & time, publisher, and how soon the quest expires - so you know what you're getting before opening it.",
+        //         "Quests now load in the background automatically, so you get notified without having to open the Quests page first."
+        //     ]
+        // }
         {
-            title: "New Features & Improvements",
-            type: "added",
+            title: "Fix",
+            type: "fixed",
             items: [
-                "Quest notifications now show the game icon, reward (with the Nitro orb bonus), task type & time, publisher, and how soon the quest expires - so you know what you're getting before opening it.",
-                "Quests now load in the background automatically, so you get notified without having to open the Quests page first."
+                "Fixed the plugin being completely broken by Discord's quest data changes.  Thanks griffinsectio (s3cryph) for report",
+            ]
+        },
+        {
+            title: "Change And Warnings",
+            type: "changed",
+            items: [
+                "Discord probably implement quest only for Playstation and Xbox. I am not sure how its gonna works. But for now this plugin will ignore this type of quest"
             ]
         }
-        // {
-        //     title: "Fix",
-        //     type: "fixed",
-        //     items: [
-        //         "Fix where quest notification keeps showing again - unaipalma",
-        //         "Fix the Report issue button - Moonl1qht"
-        //     ]
-        // }
-        // {
-        //     title: "Big Change And Warnings",
-        //     type: "changed",
-        //     items: [
-        //         "As of April 7th 2026, Discord has expressed their intent to crack down on automating quest completion. Use the script at your own risk. You most likely WILL get flagged by doing so. Read here https://github.com/xenoncolt/AutoQuestComplete/blob/main/README.md",
-        //         "Slower the video spoofing speed to reduce the risk of being flagged."
-        //     ]
-        // }
     ],
     settingsPanel: [
         {
@@ -152,6 +150,9 @@ class AutoQuestComplete {
         }
     }
 
+
+
+
     start() {
         const defaultSettings = this._flattenSettings().reduce((acc, setting) => {
             acc[setting.id] = setting.value;
@@ -165,15 +166,14 @@ class AutoQuestComplete {
             }
 
             const quest = [...this._questsStore.quests.values()].find(x =>
-                x.id !== "1248385850622869556" &&
                 x.userStatus?.enrolledAt &&
                 !x.userStatus?.completedAt &&
                 new Date(x.config.expiresAt).getTime() > Date.now()
             );
 
             if (this._questsStore && quest) {
-                this._activeQuestId = quest.config.application.id;
-                this._activeQuestName = quest.config.application.name;
+                this._activeQuestId = quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id;
+                this._activeQuestName = this.getQuestName(quest);
                 this.runQuest(quest);
             }
         } catch (e) {
@@ -195,6 +195,9 @@ class AutoQuestComplete {
         this._remindersTime.clear();
     }
 
+
+
+
     _flattenSettings(settings = this._config.settingsPanel) {
         return settings.flatMap(setting =>
             setting.type === "category" && Array.isArray(setting.settings)
@@ -215,6 +218,21 @@ class AutoQuestComplete {
                 Data.save(this._config.info.name, "settings", this.settings);
             }
         });
+    }
+
+
+    getQuestApplicationId(quest) {
+        const tasks = quest?.config?.taskConfigV2?.tasks ?? {};
+        for (const task of Object.values(tasks)) {
+            const id = task?.applications?.[0]?.id;
+            if (id) return id;
+        }
+        return quest?.config?.application?.id ?? null;
+    }
+
+    
+    getQuestName(quest) {
+        return quest?.config?.messages?.questName ?? quest?.config?.messages?.gameTitle ?? "Unknown Quest";
     }
 
     getQuestRewards(quest) {
@@ -247,7 +265,9 @@ class AutoQuestComplete {
             PLAY_ON_DESKTOP: "Play the game",
             STREAM_ON_DESKTOP: "Stream the game",
             PLAY_ACTIVITY: "Play an activity",
-            ACHIEVEMENT_IN_ACTIVITY: "Earn an achievement"
+            ACHIEVEMENT_IN_ACTIVITY: "Earn an achievement",
+            PLAY_ON_PLAYSTATION: "Play on PlayStation",
+            PLAY_ON_XBOX: "Play on Xbox"
         };
         const taskName = Object.keys(labels).find(x => tasks[x] != null);
         if (!taskName) return null;
@@ -288,7 +308,7 @@ class AutoQuestComplete {
     }
 
     buildNotificationContent(quest) {
-        const intro = `Accept "${quest.config.application.name}" to start auto-completing.`;
+        const intro = `Accept "${this.getQuestName(quest)}" to start auto-completing.`;
         const reward = this.getRewardText(quest);
         const task = this.getQuestTaskInfo(quest);
         const publisher = quest?.config?.messages?.gamePublisher;
@@ -320,20 +340,18 @@ class AutoQuestComplete {
 
     handleNewQuest() {
         const quest = [...this._questsStore.quests.values()].find(x =>
-            x.id !== "1248385850622869556" &&
             x.userStatus?.enrolledAt &&
             !x.userStatus?.completedAt &&
             new Date(x.config.expiresAt).getTime() > Date.now()
         );
 
         const new_quest = [...this._questsStore.quests.values()].find(x =>
-            x.id !== "1248385850622869556" &&
             !x.userStatus?.enrolledAt &&
             !x.userStatus?.completedAt &&
             new Date(x.config.expiresAt).getTime() > Date.now()
         );
 
-        if (new_quest && new_quest !== quest && this.settings.enableNotify && !this._notifiedQuests.has(new_quest.config.application.id)) {
+        if (new_quest && new_quest !== quest && this.settings.enableNotify && !this._notifiedQuests.has(new_quest.config.application?.id ?? this.getQuestApplicationId(new_quest) ?? new_quest.id)) {
             if (!this.shouldNotifyForQuest(new_quest)) return;
             // UI.showNotice("New quest available! Please accept it to start auto completing.", {
             //     type: "info",
@@ -347,7 +365,7 @@ class AutoQuestComplete {
             //         }
             //     ]
             // });
-            this._notifiedQuests.add(new_quest.config.application.id);
+            this._notifiedQuests.add(new_quest.config.application?.id ?? this.getQuestApplicationId(new_quest) ?? new_quest.id);
             this.showQuestNotification(new_quest);
         }
     }
@@ -428,13 +446,13 @@ class AutoQuestComplete {
                 {
                     label: "Remind Me Later",
                     onClick: () => {
-                        const existing_reminder = this._remindersTime.get(quest.config.application.id);
+                        const existing_reminder = this._remindersTime.get(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id);
                         if (existing_reminder) clearTimeout(existing_reminder);
                         const reminderTimeout = setTimeout(() => {
-                            this._remindersTime.delete(quest.config.application.id);
+                            this._remindersTime.delete(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id);
                             this.showQuestNotification(quest, true);
                         }, 60 * 60 * 1000);
-                        this._remindersTime.set(quest.config.application.id, reminderTimeout);
+                        this._remindersTime.set(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id, reminderTimeout);
                     }
                 }
             ]
@@ -443,16 +461,17 @@ class AutoQuestComplete {
 
     handleQuestChange() {
         const quest = [...this._questsStore.quests.values()].find(x =>
-            x.id !== "1248385850622869556" &&  !this._unsupportedQuests.has(x.config.application.id) &&
+            !this._unsupportedQuests.has(x.id) &&
             x.userStatus?.enrolledAt &&
             !x.userStatus?.completedAt &&
             new Date(x.config.expiresAt).getTime() > Date.now()
         );
         // Logger.info(this._config.info.name, "Quest: ", quest);
 
-        if (quest && quest.config.application.id !== this._activeQuestId) {
-            this._activeQuestId = quest.config.application.id;
-            this._activeQuestName = quest.config.application.name;
+        if (quest && (quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id) !== this._activeQuestId) {
+            this._activeQuestId = quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id;
+            this._activeQuestName = this.getQuestName(quest);
+            this._activeAppId = this.getQuestApplicationId(quest);
             UI.showToast(`New quest found: ${this._activeQuestName}`, {type:"info"});
             this.runQuest(quest);
         }
@@ -473,19 +492,30 @@ class AutoQuestComplete {
                 return;
             }
 
-            if (this._remindersTime.has(quest.config.application.id)) {
-                clearTimeout(this._remindersTime.get(quest.config.application.id));
-                this._remindersTime.delete(quest.config.application.id);
+            if (this._remindersTime.has(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id)) {
+                clearTimeout(this._remindersTime.get(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id));
+                this._remindersTime.delete(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id);
             }
 
-            if (this._notifiedQuests.has(quest.config.application.id)) {
-                this._notifiedQuests.delete(quest.config.application.id);
+            if (this._notifiedQuests.has(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id)) {
+                this._notifiedQuests.delete(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id);
             }
 
             const pid = Math.floor(Math.random() * 30000) + 1000;
             // const tasked = quest.config.taskConfigV2 ?? quest.config.taskConfig;
             const taskName = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY", "WATCH_VIDEO_ON_MOBILE", "ACHIEVEMENT_IN_ACTIVITY"]
                 .find(x => quest.config.taskConfigV2.tasks[x] != null);
+
+            if (!taskName) {
+                if (this._unsupportedQuests.has(quest.id)) return;
+                this._unsupportedQuests.add(quest.id);
+                const taskList = Object.keys(quest.config.taskConfigV2.tasks).join(", ");
+                Logger.info(this._config.info.name, `${this._activeQuestName} is not supported by this plugin. "Xbox and Playstation" Task.`);
+                UI.showToast(`Skipping ${this._activeQuestName}.`, { type: "warning" });
+                setTimeout(() => this.handleQuestChange(), 1000);
+                return;
+            }
+
             const secondsNeeded = quest.config.taskConfigV2.tasks[taskName].target;
             let secondsDone = quest.userStatus?.progress?.[taskName]?.value ?? 0;
 
@@ -521,6 +551,11 @@ class AutoQuestComplete {
                 UI.showToast(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / speed)} sec.`, { type: "info" });
             }
             else if (taskName === "PLAY_ON_DESKTOP") {
+                if (!this._activeQuestId) {
+                    Logger.error(this._config.info.name, `Could not resolve the application id for "${this._activeQuestName}".`);
+                    UI.showToast(`Could not resolve the application id for "${this._activeQuestName}".`, { type: "error" });
+                    return;
+                }
                 api.get({ url: `/applications/public?application_ids=${this._activeQuestId}` }).then(res => {
                     const appData = res.body[0];
                     const exeName = appData.executables?.find(x => x.os === "win32")?.name?.replace(">", "") ?? appData.name.replace(/[\/\\:*?"<>|]/g, "");
@@ -614,8 +649,8 @@ class AutoQuestComplete {
                 })();
             }
             else if (taskName === "ACHIEVEMENT_IN_ACTIVITY") {
-                if (this._unsupportedQuests.has(this._activeQuestId)) return;
-                this._unsupportedQuests.add(this._activeQuestId);
+                if (this._unsupportedQuests.has(quest.id)) return;
+                this._unsupportedQuests.add(quest.id);
                 UI.showConfirmationModal("Unsupported Quest Task", [`The quest "${this._activeQuestName}" has an unsupported Quest type: ${taskName}.`, "AutoQuestComplete will not be able to complete this quest. Because it's a server-side quest.\n  **Please complete it manually**."], {
                     confirmText: "Go to Quest",
                     onConfirm: async (e) => {
