@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.9.0
+ * @version 0.9.1
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.dev",
-        version: "0.9.0",
+        version: "0.9.1",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -41,16 +41,16 @@ const config = {
             title: "Fix",
             type: "fixed",
             items: [
-                "Fixed the plugin being completely broken by Discord's quest data changes.  Thanks griffinsectio (s3cryph) for report",
-            ]
-        },
-        {
-            title: "Change And Warnings",
-            type: "changed",
-            items: [
-                "Discord probably implement quest only for Playstation and Xbox. I am not sure how its gonna works. But for now this plugin will ignore this type of quest"
+                "Fixed unsupported quests model button open new browser window instead client",
             ]
         }
+        // {
+        //     title: "Change And Warnings",
+        //     type: "changed",
+        //     items: [
+        //         "Discord probably implement quest only for Playstation and Xbox. I am not sure how its gonna works. But for now this plugin will ignore this type of quest"
+        //     ]
+        // }
     ],
     settingsPanel: [
         {
@@ -370,65 +370,79 @@ class AutoQuestComplete {
         }
     }
 
+
+    async openQuests() {
+        try {
+            const quest_link = document.querySelector('a[href="/quest-home"]');
+
+            if (quest_link) {
+                quest_link.click();
+                await new Promise(r => setTimeout(r, 300));
+                if (location.pathname.startsWith("/quest")) return;
+            }
+
+            const Router = Webpack.getModule(m => m?.transitionTo && m?.replaceWith && m?.getHistory, { searchExports: true });
+            if (Router?.transitionTo) {
+                Router.transitionTo("/quest-home");
+                return;
+            }
+
+            window.history.pushState({}, "", "/quest-home");
+            window.dispatchEvent(new PopStateEvent("popstate"));
+
+        } catch (err) {
+            Logger.error(this._config.info.name, "Failed to open quests page", err);
+        }
+    }
+
+
+    focusQuestContainer(quest) {
+        const quest_title_id = `quest-tile-${quest.id}`;
+        let attempts = 0;
+
+        const highlight_container = () => {
+            const quest_container = document.getElementById(quest_title_id);
+
+            if (!quest_container) {
+                if (attempts++ < 40) {
+                    setTimeout(highlight_container, 250);
+                } else {
+                    Logger.warn(this._config.info.name, `Gave up waiting for ${quest_title_id} to render.`);
+                }
+                return;
+            }
+
+            quest_container.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+            quest_container.setAttribute("tabindex", "-1");
+            quest_container.focus({ preventScroll: true });
+
+            const originalOutline = quest_container.style.outline;
+            const originalOutlineOffset = quest_container.style.outlineOffset;
+            const originalBoxShadow = quest_container.style.boxShadow;
+            const originalTransition = quest_container.style.transition;
+
+            quest_container.style.transition = "box-shadow 180ms ease, outline 180ms ease";
+            quest_container.style.outline = "3px solid rgba(88, 101, 242, 0.95)";
+            quest_container.style.outlineOffset = "6px";
+            quest_container.style.boxShadow = "0 0 0 8px rgba(88, 101, 242, 0.2)";
+
+            setTimeout(() => {
+                if (!quest_container.isConnected) return;
+                quest_container.style.outline = originalOutline;
+                quest_container.style.outlineOffset = originalOutlineOffset;
+                quest_container.style.boxShadow = originalBoxShadow;
+                quest_container.style.transition = originalTransition;
+            }, 5000);
+        };
+
+        setTimeout(highlight_container, 250);
+    }
+
+
     showQuestNotification(quest, reminder = false) {
         if (!quest) return;
         const title = reminder ? `Reminder: New Quest Available!` : `New Quest Available!`;
-        const openQuests = () => {
-            try {
-                const quest_link = document.querySelector('a[href="/quest-home"]');
-
-                if (quest_link) {
-                    quest_link.click();
-                    return;
-                }
-
-                // fallback
-                window.history.pushState({}, "", "/quest-home");
-                window.dispatchEvent(new PopStateEvent("popstate"));
-
-            } catch (err) {
-                Logger.error(this._config.info.name, "Failed to open quests page", err);
-            }
-        };
-        const focusQuestContainer = () => {
-            const quest_title_id = `quest-tile-${quest.id}`;
-            let attempts = 0;
-
-            const highlight_container = () => {
-                const quest_container = document.getElementById(quest_title_id);
-
-                if (!quest_container) {
-                    if (attempts++ < 20) {
-                        setTimeout(highlight_container, 250);
-                    }
-                    return;
-                }
-
-                quest_container.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-                quest_container.setAttribute("tabindex", "-1");
-                quest_container.focus({ preventScroll: true });
-
-                const originalOutline = quest_container.style.outline;
-                const originalOutlineOffset = quest_container.style.outlineOffset;
-                const originalBoxShadow = quest_container.style.boxShadow;
-                const originalTransition = quest_container.style.transition;
-
-                quest_container.style.transition = "box-shadow 180ms ease, outline 180ms ease";
-                quest_container.style.outline = "3px solid rgba(88, 101, 242, 0.95)";
-                quest_container.style.outlineOffset = "6px";
-                quest_container.style.boxShadow = "0 0 0 8px rgba(88, 101, 242, 0.2)";
-
-                setTimeout(() => {
-                    if (!quest_container.isConnected) return;
-                    quest_container.style.outline = originalOutline;
-                    quest_container.style.outlineOffset = originalOutlineOffset;
-                    quest_container.style.boxShadow = originalBoxShadow;
-                    quest_container.style.transition = originalTransition;
-                }, 5000);
-            };
-
-            setTimeout(highlight_container, 250);
-        };
+        
         UI.showNotification({
             title: title,
             content: this.buildNotificationContent(quest),
@@ -438,9 +452,9 @@ class AutoQuestComplete {
             actions: [
                 {
                     label: "Go to Quests",
-                    onClick: () => {
-                        openQuests();
-                        focusQuestContainer();
+                    onClick: async () => {
+                        await this.openQuests();
+                        this.focusQuestContainer(quest);
                     }
                 },
                 {
@@ -654,7 +668,16 @@ class AutoQuestComplete {
                 UI.showConfirmationModal("Unsupported Quest Task", [`The quest "${this._activeQuestName}" has an unsupported Quest type: ${taskName}.`, "AutoQuestComplete will not be able to complete this quest. Because it's a server-side quest.\n  **Please complete it manually**."], {
                     confirmText: "Go to Quest",
                     onConfirm: async (e) => {
-                        open(`/quests/${quest.id}`);
+                        await new Promise(resolve => {
+                            const started = Date.now();
+                            const check = () => {
+                                if (!document.querySelector('[role="dialog"]') || Date.now() - started > 3000) return resolve();
+                                setTimeout(check, 100);
+                            };
+                            check();
+                        });
+                        await this.openQuests();
+                        this.focusQuestContainer(quest);
                     }
                 });
                 setTimeout(() => this.handleQuestChange(), 5000);
