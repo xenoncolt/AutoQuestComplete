@@ -163,10 +163,6 @@ class AutoQuestComplete {
             }
 
             const quests = [...this._questsStore.quests.values()]
-            
-            for (const q of quests) {
-              if (!this.isQuestSupported(q)) this._unsupportedQuests.add(q.id);
-            }
 
             const quest = quests.find(x =>
                 x.userStatus?.enrolledAt &&
@@ -174,7 +170,7 @@ class AutoQuestComplete {
                 new Date(x.config.expiresAt).getTime() > Date.now()
             );
 
-            if (this._questsStore && quest) {
+            if (this._questsStore && quest && this.isQuestSupported(quest)) {
                 this._activeQuestId = quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id;
                 this._activeQuestName = this.getQuestName(quest);
                 this.runQuest(quest);
@@ -207,9 +203,10 @@ class AutoQuestComplete {
     }
 
     isQuestSupported(quest) {
-      const taskName = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY", "WATCH_VIDEO_ON_MOBILE", "ACHIEVEMENT_IN_ACTIVITY"]
-          .find(x => quest.config.taskConfigV2.tasks[x] != null);
-      return taskName && taskName !== "ACHIEVEMENT_IN_ACTIVITY" ? true : false
+      const supportedTaskTypes = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY", "WATCH_VIDEO_ON_MOBILE"];
+      const taskName = supportedTaskTypes.find(x => quest.config.taskConfigV2.tasks[x] != null);
+
+      return Boolean(taskName);
     }
 
     getSettingsPanel() {
