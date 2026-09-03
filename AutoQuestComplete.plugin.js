@@ -170,7 +170,9 @@ class AutoQuestComplete {
                 new Date(x.config.expiresAt).getTime() > Date.now()
             );
 
-            if (this._questsStore && quest && this.isQuestSupported(quest)) {
+            if (quest && !this.isQuestSupported(quest)) this._unsupportedQuests.add(quest.id);
+
+            if (this._questsStore && quest) {
                 this._activeQuestId = quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id;
                 this._activeQuestName = this.getQuestName(quest);
                 this.runQuest(quest);
