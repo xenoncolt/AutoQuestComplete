@@ -150,9 +150,6 @@ class AutoQuestComplete {
         }
     }
 
-
-
-
     start() {
         const defaultSettings = this._flattenSettings().reduce((acc, setting) => {
             acc[setting.id] = setting.value;
@@ -165,11 +162,15 @@ class AutoQuestComplete {
                 this._questsStore.addChangeListener(this._boundNewQuestHandler);
             }
 
-            const quest = [...this._questsStore.quests.values()].find(x =>
+            const quests = [...this._questsStore.quests.values()]
+
+            const quest = quests.find(x =>
                 x.userStatus?.enrolledAt &&
                 !x.userStatus?.completedAt &&
                 new Date(x.config.expiresAt).getTime() > Date.now()
             );
+
+            if (quest && !this.isQuestSupported(quest)) this._unsupportedQuests.add(quest.id);
 
             if (this._questsStore && quest) {
                 this._activeQuestId = quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id;
@@ -195,15 +196,19 @@ class AutoQuestComplete {
         this._remindersTime.clear();
     }
 
-
-
-
     _flattenSettings(settings = this._config.settingsPanel) {
         return settings.flatMap(setting =>
             setting.type === "category" && Array.isArray(setting.settings)
                 ? this._flattenSettings(setting.settings)
                 : [setting]
         );
+    }
+
+    isQuestSupported(quest) {
+      const supportedTaskTypes = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY", "WATCH_VIDEO_ON_MOBILE"];
+      const taskName = supportedTaskTypes.find(x => quest.config.taskConfigV2.tasks[x] != null);
+
+      return Boolean(taskName);
     }
 
     getSettingsPanel() {
@@ -665,6 +670,7 @@ class AutoQuestComplete {
             else if (taskName === "ACHIEVEMENT_IN_ACTIVITY") {
                 if (this._unsupportedQuests.has(quest.id)) return;
                 this._unsupportedQuests.add(quest.id);
+
                 UI.showConfirmationModal("Unsupported Quest Task", [`The quest "${this._activeQuestName}" has an unsupported Quest type: ${taskName}.`, "AutoQuestComplete will not be able to complete this quest. Because it's a server-side quest.\n  **Please complete it manually**."], {
                     confirmText: "Go to Quest",
                     onConfirm: async (e) => {
@@ -769,3 +775,4 @@ class AutoQuestComplete {
 }
 
 module.exports = AutoQuestComplete;
+
