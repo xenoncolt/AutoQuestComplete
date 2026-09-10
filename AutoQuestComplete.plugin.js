@@ -756,7 +756,15 @@ class AutoQuestComplete {
 
     async checkForUpdate() {
         try {
-            let fileContent = await (await fetch(this._config.info.github_raw, { headers: { "User-Agent": "BetterDiscord" } })).text();
+            const updateUrl = this._config.info.github_raw;
+            if (!/^https:\/\/raw\.githubusercontent\.com\/xenoncolt\/AutoQuestComplete\//.test(updateUrl)) {
+                throw new Error("Refusing to fetch update from untrusted source: " + updateUrl);
+            }
+            let response = await fetch(updateUrl, { headers: { "User-Agent": "BetterDiscord" } });
+            if (!response.ok) {
+                throw new Error(`Update check failed with status ${response.status}`);
+            }
+            let fileContent = await response.text();
             let remoteMeta = this.parseMeta(fileContent);
             if (Utils.semverCompare(this._config.info.version, remoteMeta.version) > 0) {
                 this.newUpdateNotify(remoteMeta, fileContent);
