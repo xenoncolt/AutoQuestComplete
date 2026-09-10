@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
  * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.9.1
+ * @version 0.9.2
  * @author @aamiaa published by Xenon Colt
  * @authorLink https://github.com/aamiaa
  * @website https://github.com/xenoncolt/AutoQuestComplete
@@ -15,7 +15,7 @@ const config = {
         name: 'AutoQuestComplete',
         authorId: "709210314230726776",
         website: "https://xenoncolt.dev",
-        version: "0.9.1",
+        version: "0.10.0",
         description: "Automatically completes quests for you",
         author: [
             {
@@ -38,10 +38,13 @@ const config = {
         //     ]
         // }
         {
-            title: "Fix",
-            type: "fixed",
+            title: "New Features & Improvements",
+            type: "added",
             items: [
-                "Fixed unsupported quests model button open new browser window instead client",
+                "The quests AutoQuestComplete can't complete, like \"launch the game\" achievement quests and PlayStation/Xbox quests, no longer trigger the new quest notification",
+                "New **Notify For Unsupported Quests** setting (off by default)",
+                "The **Unsupported Quest Task** popup is now saved on config, so it only shows once per quest instead of every time Discord starts",
+                "Thanks for the help griffinsectio and Thanks for creating issue TouhouJevil"
             ]
         }
         // {
@@ -59,6 +62,13 @@ const config = {
             name: "New Quest Notification",
             note: "Enable/Disable notification when a new quest is available.",
             value: true
+        },
+        {
+            type: "switch",
+            id: "notifyUnsupported",
+            name: "Notify For Unsupported Quests",
+            note: "Notify for quests this plugin can't complete for you (launch the game achievement quests, PlayStation/Xbox quests)",
+            value: false
         },
         {
             type: "category",
@@ -109,6 +119,9 @@ const config = {
 
 const { Webpack, UI, Logger, Data, Utils, React } = BdApi;
 
+
+const SUPPORTED_TASKS = ["WATCH_VIDEO", "WATCH_VIDEO_ON_MOBILE", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY"];
+
 class AutoQuestComplete {
     constructor() {
         this._config = config;
@@ -118,6 +131,7 @@ class AutoQuestComplete {
         this._activeQuestId = null;
         this._activeQuestName = null;
         this._unsupportedQuests = new Set();
+        this._storedUnsupportedQuests = {};
         this._notifiedQuests = new Set();
         this._remindersTime = new Map();
         this.settings;
@@ -159,6 +173,7 @@ class AutoQuestComplete {
             return acc;
         }, {});
         this.settings = Object.assign(defaultSettings, Data.load(this._config.info.name, "settings") || {});
+        this.loadUnsupportedQuests();
         try {
             if (this._questsStore && this._questsStore.addChangeListener) {
                 this._questsStore.addChangeListener(this._boundHandleQuestChange);
@@ -166,6 +181,7 @@ class AutoQuestComplete {
             }
 
             const quest = [...this._questsStore.quests.values()].find(x =>
+                !this._unsupportedQuests.has(x.id) &&
                 x.userStatus?.enrolledAt &&
                 !x.userStatus?.completedAt &&
                 new Date(x.config.expiresAt).getTime() > Date.now()
@@ -221,6 +237,41 @@ class AutoQuestComplete {
     }
 
 
+    loadUnsupportedQuests() {
+        let stored = {};
+        try {
+            stored = Data.load(this._config.info.name, "unsupportedQuests") || {};
+        } catch (err) {
+            stored = {};
+        }
+
+        const now = Date.now();
+        this._storedUnsupportedQuests = {};
+        for (const [questId, expiresAt] of Object.entries(stored)) {
+            if (typeof expiresAt !== "number" || expiresAt <= now) continue; 
+            this._storedUnsupportedQuests[questId] = expiresAt;
+            this._unsupportedQuests.add(questId);
+        }
+
+        this.saveUnsupportedQuests();
+    }
+
+    markQuestUnsupported(quest) {
+        this._unsupportedQuests.add(quest.id);
+        const expires_at = new Date(quest?.config?.expiresAt).getTime();
+        this._storedUnsupportedQuests[quest.id] = Number.isFinite(expires_at) ? expires_at : Date.now() + 7 * 24 * 60 * 60 * 1000;
+        this.saveUnsupportedQuests();
+    }
+
+    saveUnsupportedQuests() {
+        try {
+            Data.save(this._config.info.name, "unsupportedQuests", this._storedUnsupportedQuests);
+        } catch (err) {
+            Logger.error(this._config.info.name, "Failed to save unsupported quests", err);
+        }
+    }
+
+
     getQuestApplicationId(quest) {
         const tasks = quest?.config?.taskConfigV2?.tasks ?? {};
         for (const task of Object.values(tasks)) {
@@ -237,6 +288,11 @@ class AutoQuestComplete {
 
     getQuestRewards(quest) {
         return quest?.config?.rewardsConfig?.rewards ?? [];
+    }
+
+    isQuestSupported(quest) {
+        const tasks = quest?.config?.taskConfigV2?.tasks ?? {};
+        return SUPPORTED_TASKS.some(x => tasks[x] != null);
     }
 
     shouldNotifyForQuest(quest) {
@@ -308,7 +364,7 @@ class AutoQuestComplete {
     }
 
     buildNotificationContent(quest) {
-        const intro = `Accept "${this.getQuestName(quest)}" to start auto-completing.`;
+        const intro = this.isQuestSupported(quest) ? `Accept "${this.getQuestName(quest)}" to start auto-completing.` : `"${this.getQuestName(quest)}" has to be completed manually, AutoQuestComplete can't do this quest type for you.`;
         const reward = this.getRewardText(quest);
         const task = this.getQuestTaskInfo(quest);
         const publisher = quest?.config?.messages?.gamePublisher;
@@ -353,6 +409,10 @@ class AutoQuestComplete {
 
         if (new_quest && new_quest !== quest && this.settings.enableNotify && !this._notifiedQuests.has(new_quest.config.application?.id ?? this.getQuestApplicationId(new_quest) ?? new_quest.id)) {
             if (!this.shouldNotifyForQuest(new_quest)) return;
+            if (!this.settings.notifyUnsupported && !this.isQuestSupported(new_quest)) {
+                Logger.info(this._config.info.name, `Skipping notification for "${this.getQuestName(new_quest)}", coz its task can't be completed by the plugin.`);
+                return;
+            }
             // UI.showNotice("New quest available! Please accept it to start auto completing.", {
             //     type: "info",
             //     timeout: 5 * 60 * 1000,
@@ -517,12 +577,11 @@ class AutoQuestComplete {
 
             const pid = Math.floor(Math.random() * 30000) + 1000;
             // const tasked = quest.config.taskConfigV2 ?? quest.config.taskConfig;
-            const taskName = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY", "WATCH_VIDEO_ON_MOBILE", "ACHIEVEMENT_IN_ACTIVITY"]
-                .find(x => quest.config.taskConfigV2.tasks[x] != null);
+            const taskName = [...SUPPORTED_TASKS, "ACHIEVEMENT_IN_ACTIVITY"].find(x => quest.config.taskConfigV2.tasks[x] != null);
 
             if (!taskName) {
                 if (this._unsupportedQuests.has(quest.id)) return;
-                this._unsupportedQuests.add(quest.id);
+                this.markQuestUnsupported(quest);
                 const taskList = Object.keys(quest.config.taskConfigV2.tasks).join(", ");
                 Logger.info(this._config.info.name, `${this._activeQuestName} is not supported by this plugin. "Xbox and Playstation" Task.`);
                 UI.showToast(`Skipping ${this._activeQuestName}.`, { type: "warning" });
@@ -664,7 +723,7 @@ class AutoQuestComplete {
             }
             else if (taskName === "ACHIEVEMENT_IN_ACTIVITY") {
                 if (this._unsupportedQuests.has(quest.id)) return;
-                this._unsupportedQuests.add(quest.id);
+                this.markQuestUnsupported(quest);
                 UI.showConfirmationModal("Unsupported Quest Task", [`The quest "${this._activeQuestName}" has an unsupported Quest type: ${taskName}.`, "AutoQuestComplete will not be able to complete this quest. Because it's a server-side quest.\n  **Please complete it manually**."], {
                     confirmText: "Go to Quest",
                     onConfirm: async (e) => {
