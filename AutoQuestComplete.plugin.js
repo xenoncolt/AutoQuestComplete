@@ -126,6 +126,7 @@ class AutoQuestComplete {
     constructor() {
         this._config = config;
         this._questsStore = Webpack.Stores.QuestStore;
+        this._router = null;
         this._boundHandleQuestChange = this.handleQuestChange.bind(this);
         this._boundNewQuestHandler = this.handleNewQuest.bind(this);
         this._activeQuestId = null;
@@ -181,19 +182,22 @@ class AutoQuestComplete {
         this.settings = Object.assign(defaultSettings, Data.load(this._config.info.name, "settings") || {});
         this.loadUnsupportedQuests();
         try {
-            if (this._questsStore && this._questsStore.addChangeListener) {
-                this._questsStore.addChangeListener(this._boundHandleQuestChange);
-                this._questsStore.addChangeListener(this._boundNewQuestHandler);
+            if (!this._questsStore?.quests || !this._questsStore.addChangeListener) {
+                Logger.error(this._config.info.name, "QuestStore is unavailable, Discord may have changed.");
+                UI.showToast("AutoQuestComplete could not find the quest store.", { type: "error" });
+                return;
             }
+            this._questsStore.addChangeListener(this._boundHandleQuestChange);
+            this._questsStore.addChangeListener(this._boundNewQuestHandler);
 
-            const quest = [...this._questsStore.quests.values()].find(x =>
+            const quest = this.getQuests().find(x =>
                 !this._unsupportedQuests.has(x.id) &&
                 x.userStatus?.enrolledAt &&
                 !x.userStatus?.completedAt &&
                 new Date(x.config.expiresAt).getTime() > Date.now()
             );
 
-            if (this._questsStore && quest) {
+            if (quest) {
                 this._activeQuestId = quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id;
                 this._activeQuestName = this.getQuestName(quest);
                 this.runQuest(quest);
@@ -469,14 +473,35 @@ class AutoQuestComplete {
         );
     }
 
+    getQuests() {
+        return [...(this._questsStore?.quests?.values() ?? [])];
+    }
+
+    resolveDependencies() {
+        return {
+            api: Webpack.getByKeys("get", "post", "put", "patch", "del", { searchExports: true }),
+            FluxDispatcher: Webpack.getByKeys("dispatch", "subscribe", "register", { searchExports: true }),
+            ApplicationStreamingStore: Webpack.Stores.ApplicationStreamingStore,
+            RunningGameStore: Webpack.Stores.RunningGameStore
+        };
+    }
+
+    hasDependencies(dependencies, names) {
+        const missing = names.filter(name => !dependencies[name]);
+        if (!missing.length) return true;
+        Logger.error(this._config.info.name, `Missing Discord modules: ${missing.join(", ")}`);
+        UI.showToast(`Could not find required Discord modules (${missing.join(", ")}). Discord may have changed.`, { type: "error" });
+        return false;
+    }
+
     handleNewQuest() {
-        const quest = [...this._questsStore.quests.values()].find(x =>
+        const quest = this.getQuests().find(x =>
             x.userStatus?.enrolledAt &&
             !x.userStatus?.completedAt &&
             new Date(x.config.expiresAt).getTime() > Date.now()
         );
 
-        const new_quest = [...this._questsStore.quests.values()].find(x =>
+        const new_quest = this.getQuests().find(x =>
             !x.userStatus?.enrolledAt &&
             !x.userStatus?.completedAt &&
             new Date(x.config.expiresAt).getTime() > Date.now()
@@ -516,9 +541,9 @@ class AutoQuestComplete {
                 if (location.pathname.startsWith("/quest")) return;
             }
 
-            const Router = Webpack.getModule(m => m?.transitionTo && m?.replaceWith && m?.getHistory, { searchExports: true });
-            if (Router?.transitionTo) {
-                Router.transitionTo("/quest-home");
+            this._router ??= Webpack.getModule(m => m?.transitionTo && m?.replaceWith && m?.getHistory, { searchExports: true });
+            if (this._router?.transitionTo) {
+                this._router.transitionTo("/quest-home");
                 return;
             }
 
@@ -611,7 +636,7 @@ class AutoQuestComplete {
     }
 
     handleQuestChange() {
-        const quest = [...this._questsStore.quests.values()].find(x =>
+        const quest = this.getQuests().find(x =>
             !this._unsupportedQuests.has(x.id) &&
             x.userStatus?.enrolledAt &&
             !x.userStatus?.completedAt &&
@@ -633,10 +658,9 @@ class AutoQuestComplete {
         if (!lifecycleSignal || lifecycleSignal.aborted) return;
         const signal = this.startRun();
         try {
-            let ApplicationStreamingStore = Webpack.Stores.ApplicationStreamingStore;
-            let FluxDispatcher = Webpack.getByKeys('dispatch', 'subscribe', 'register', { searchExports: true });
-            let api = Webpack.getModule(m => m?.Bo?.get)?.Bo;
-            let RunningGameStore = Webpack.Stores.RunningGameStore;
+            const dependencies = this.resolveDependencies();
+            if (!this.hasDependencies(dependencies, ["api"])) return;
+            const { api, FluxDispatcher, ApplicationStreamingStore, RunningGameStore } = dependencies;
 
             if (!quest) {
                 Logger.info(this._config.info.name, "No uncompleted quests found.");
@@ -710,6 +734,7 @@ class AutoQuestComplete {
                     UI.showToast(`Could not resolve the application id for "${this._activeQuestName}".`, { type: "error" });
                     return;
                 }
+                if (!this.hasDependencies(dependencies, ["FluxDispatcher", "RunningGameStore"])) return;
                 api.get({ url: `/applications/public?application_ids=${this._activeQuestId}` }).then(res => {
                     if (signal.aborted) return;
                     const appData = res.body[0];
@@ -756,6 +781,7 @@ class AutoQuestComplete {
                 });
             }
             else if (taskName === "STREAM_ON_DESKTOP") {
+                if (!this.hasDependencies(dependencies, ["FluxDispatcher", "ApplicationStreamingStore"])) return;
                 const unpatchStream = Patcher.instead(this._config.info.name, ApplicationStreamingStore, "getStreamerActiveStreamMetadata", () => ({
                     id: this._activeQuestId,
                     pid,
