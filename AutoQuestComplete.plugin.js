@@ -114,7 +114,8 @@ const config = {
     ]
 }
 
-const { Webpack, UI, Logger, Data, Utils, React, Patcher } = BdApi;
+const PLUGIN_NAME = "AutoQuestComplete";
+const { Webpack, UI, Logger, Data, Utils, React, Patcher } = new BdApi(PLUGIN_NAME);
 
 const SUPPORTED_TASKS = ["WATCH_VIDEO", "WATCH_VIDEO_ON_MOBILE", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY"];
 const API_MAX_RETRIES = 3;
@@ -188,7 +189,7 @@ class AutoQuestComplete {
         const { name } = this._config.info;
         const version = this._version;
         try {
-            const stored = Data.load(name, "currentVersionInfo");
+            const stored = Data.load("currentVersionInfo");
             const versionInfo = { hasShownChangelog: false, ...stored, version };
             if (stored?.version !== version) versionInfo.hasShownChangelog = false;
 
@@ -200,9 +201,9 @@ class AutoQuestComplete {
                 });
                 versionInfo.hasShownChangelog = true;
             }
-            Data.save(name, "currentVersionInfo", versionInfo);
+            Data.save("currentVersionInfo", versionInfo);
         } catch (err) {
-            Logger.error(name, "Could not show the changelog", err);
+            Logger.error("Could not show the changelog", err);
         }
     }
 
@@ -226,7 +227,7 @@ class AutoQuestComplete {
 
     start() {
         if (!this.isBetterDiscordSupported()) {
-            Logger.error(this._config.info.name, `BetterDiscord ${MIN_BETTERDISCORD_VERSION} or newer is required.`);
+            Logger.error(`BetterDiscord ${MIN_BETTERDISCORD_VERSION} or newer is required.`);
             UI.showToast(`AutoQuestComplete requires BetterDiscord ${MIN_BETTERDISCORD_VERSION} or newer.`, { type: "error" });
             return;
         }
@@ -238,7 +239,7 @@ class AutoQuestComplete {
         this._questsStore = Webpack.Stores.QuestStore;
         try {
             if (!this._questsStore?.quests || !this._questsStore.addChangeListener) {
-                Logger.error(this._config.info.name, "QuestStore is unavailable, Discord may have changed.");
+                Logger.error("QuestStore is unavailable, Discord may have changed.");
                 UI.showToast("AutoQuestComplete could not find the quest store.", { type: "error" });
                 return;
             }
@@ -251,7 +252,7 @@ class AutoQuestComplete {
                 this.runQuest(quest);
             }
         } catch (err) {
-            Logger.error(this._config.info.name, "Error while starting AutoQuestComplete", err);
+            Logger.error("Error while starting AutoQuestComplete", err);
             UI.showToast("Error while starting AutoQuestComplete", { type: "error" });
         }
     }
@@ -273,7 +274,7 @@ class AutoQuestComplete {
         this._notifyRetries = 0;
         this.endRun();
         this.runCleanups();
-        Patcher.unpatchAll(this._config.info.name);
+        Patcher.unpatchAll();
         this._activeQuestId = null;
         this._activeQuestName = null;
         this._activeAppId = null;
@@ -319,7 +320,7 @@ class AutoQuestComplete {
             try {
                 cleanup();
             } catch (err) {
-                Logger.error(this._config.info.name, "Cleanup failed", err);
+                Logger.error("Cleanup failed", err);
             }
         };
         scope.add(run);
@@ -356,9 +357,9 @@ class AutoQuestComplete {
         const defaults = Object.fromEntries(this._flattenSettings().map(setting => [setting.id, setting.value]));
         let stored = null;
         try {
-            stored = Data.load(this._config.info.name, "settings");
+            stored = Data.load("settings");
         } catch (err) {
-            Logger.error(this._config.info.name, "Failed to load settings, using defaults", err);
+            Logger.error("Failed to load settings, using defaults", err);
         }
         const saved = stored && typeof stored === "object" ? stored : {};
         for (const id of Object.keys(defaults)) {
@@ -382,9 +383,9 @@ class AutoQuestComplete {
             onChange: (category, id, value) => {
                 this.settings[id] = value;
                 try {
-                    Data.save(this._config.info.name, "settings", this.settings);
+                    Data.save("settings", this.settings);
                 } catch (err) {
-                    Logger.error(this._config.info.name, "Failed to save settings", err);
+                    Logger.error("Failed to save settings", err);
                 }
             }
         });
@@ -393,9 +394,9 @@ class AutoQuestComplete {
     loadUnsupportedQuests() {
         let stored = null;
         try {
-            stored = Data.load(this._config.info.name, "unsupportedQuests");
+            stored = Data.load("unsupportedQuests");
         } catch (err) {
-            Logger.error(this._config.info.name, "Failed to load unsupported quests", err);
+            Logger.error("Failed to load unsupported quests", err);
         }
         stored ??= {};
 
@@ -419,9 +420,9 @@ class AutoQuestComplete {
 
     saveUnsupportedQuests() {
         try {
-            Data.save(this._config.info.name, "unsupportedQuests", this._storedUnsupportedQuests);
+            Data.save("unsupportedQuests", this._storedUnsupportedQuests);
         } catch (err) {
-            Logger.error(this._config.info.name, "Failed to save unsupported quests", err);
+            Logger.error("Failed to save unsupported quests", err);
         }
     }
 
@@ -581,7 +582,7 @@ class AutoQuestComplete {
                 return await api[method](options);
             } catch (err) {
                 if (signal.aborted || attempt >= API_MAX_RETRIES || !this.isRetryableError(err)) throw err;
-                Logger.warn(this._config.info.name, `Request ${method.toUpperCase()} ${options.url} failed (${err?.status ?? "network"}), retrying.`);
+                Logger.warn(`Request ${method.toUpperCase()} ${options.url} failed (${err?.status ?? "network"}), retrying.`);
                 await this.sleep(this.getBackoffDelay(err, attempt), signal);
                 if (signal.aborted) throw err;
             }
@@ -591,7 +592,7 @@ class AutoQuestComplete {
     reportAsyncError(err, signal) {
         if (signal.aborted) return;
         const reason = this.getErrorMessage(err);
-        Logger.error(this._config.info.name, `Quest "${this._activeQuestName}" failed`, err);
+        Logger.error(`Quest "${this._activeQuestName}" failed`, err);
         UI.showToast(`Quest "${this._activeQuestName}" failed: ${reason}`, { type: "error" });
     }
 
@@ -608,13 +609,13 @@ class AutoQuestComplete {
 
     hasApplicationId() {
         if (this._activeAppId) return true;
-        Logger.error(this._config.info.name, `Could not resolve the application id for "${this._activeQuestName}".`);
+        Logger.error(`Could not resolve the application id for "${this._activeQuestName}".`);
         UI.showToast(`Could not resolve the application id for "${this._activeQuestName}".`, { type: "error" });
         return false;
     }
 
     reportProgress(progress, secondsNeeded) {
-        Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
+        Logger.info(`Quest progress: ${progress}/${secondsNeeded}`);
         const now = Date.now();
         if (now - this._lastProgressToast < PROGRESS_TOAST_INTERVAL_MS) return;
         this._lastProgressToast = now;
@@ -629,7 +630,7 @@ class AutoQuestComplete {
             if (!Number.isFinite(progress)) return;
             this.reportProgress(progress, secondsNeeded);
             if (progress < secondsNeeded) return;
-            Logger.info(this._config.info.name, "Quest completed!");
+            Logger.info("Quest completed!");
             UI.showToast("Quest completed!", { type: "success" });
             onComplete();
         };
@@ -638,7 +639,7 @@ class AutoQuestComplete {
     hasDependencies(dependencies, names) {
         const missing = names.filter(name => !dependencies[name]);
         if (!missing.length) return true;
-        Logger.error(this._config.info.name, `Missing Discord modules: ${missing.join(", ")}`);
+        Logger.error(`Missing Discord modules: ${missing.join(", ")}`);
         UI.showToast(`Could not find required Discord modules (${missing.join(", ")}). Discord may have changed.`, { type: "error" });
         return false;
     }
@@ -681,10 +682,10 @@ class AutoQuestComplete {
                 questLink.click();
                 return;
             }
-            Logger.warn(this._config.info.name, "No way found to open the quests page.");
+            Logger.warn("No way found to open the quests page.");
             UI.showToast("Could not open the quests page.", { type: "error" });
         } catch (err) {
-            Logger.error(this._config.info.name, "Failed to open quests page", err);
+            Logger.error("Failed to open quests page", err);
         }
     }
 
@@ -699,7 +700,7 @@ class AutoQuestComplete {
                 if (attempts++ < FOCUS_MAX_ATTEMPTS) {
                     this.setTimer(highlightTile, FOCUS_POLL_MS);
                 } else {
-                    Logger.warn(this._config.info.name, `Gave up waiting for ${tileId} to render.`);
+                    Logger.warn(`Gave up waiting for ${tileId} to render.`);
                 }
                 return;
             }
@@ -844,7 +845,7 @@ class AutoQuestComplete {
             if (!this.hasDependencies(dependencies, ["api"])) return;
 
             if (!quest) {
-                Logger.info(this._config.info.name, "No uncompleted quests found.");
+                Logger.info("No uncompleted quests found.");
                 UI.showToast("No uncompleted quests found.", { type: "info" });
                 return;
             }
@@ -861,7 +862,7 @@ class AutoQuestComplete {
 
             const secondsNeeded = tasks[taskName].target;
             if (taskName !== "ACHIEVEMENT_IN_ACTIVITY" && !Number.isFinite(secondsNeeded)) {
-                Logger.error(this._config.info.name, `Quest "${this._activeQuestName}" has no valid target for ${taskName}.`);
+                Logger.error(`Quest "${this._activeQuestName}" has no valid target for ${taskName}.`);
                 UI.showToast(`Quest "${this._activeQuestName}" has an unexpected task format.`, { type: "error" });
                 return;
             }
@@ -904,7 +905,7 @@ class AutoQuestComplete {
     skipUnsupportedQuest(quest) {
         if (this._unsupportedQuests.has(quest.id)) return;
         this.markQuestUnsupported(quest);
-        Logger.info(this._config.info.name, `${this._activeQuestName} is not supported by this plugin. "Xbox and Playstation" Task.`);
+        Logger.info(`${this._activeQuestName} is not supported by this plugin. "Xbox and Playstation" Task.`);
         UI.showToast(`Skipping ${this._activeQuestName}.`, { type: "warning" });
         this.setTimer(() => this.handleQuestChange(), SKIP_NEXT_QUEST_DELAY_MS);
     }
@@ -934,11 +935,11 @@ class AutoQuestComplete {
             if (!isFinished) {
                 await this.request(api, "post", { url: `/quests/${quest.id}/video-progress`, body: { timestamp: secondsNeeded } }, lifecycleSignal);
             }
-            Logger.info(this._config.info.name, "Quest completed!");
+            Logger.info("Quest completed!");
             UI.showToast("Quest completed!", { type: "success" });
         })().catch(err => this.reportAsyncError(err, signal));
 
-        Logger.info(this._config.info.name, `Spoofing video for ${this._activeQuestName}.`);
+        Logger.info(`Spoofing video for ${this._activeQuestName}.`);
         UI.showToast(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / speed)} sec.`, { type: "info" });
     }
 
@@ -966,8 +967,8 @@ class AutoQuestComplete {
             };
             const realGames = RunningGameStore.getRunningGames();
             const fakeGames = [fakeGame];
-            const unpatchGames = Patcher.instead(this._config.info.name, RunningGameStore, "getRunningGames", () => fakeGames);
-            const unpatchGameForPid = Patcher.instead(this._config.info.name, RunningGameStore, "getGameForPID", (_, [gamePid]) => fakeGames.find(x => x.pid === gamePid));
+            const unpatchGames = Patcher.instead(RunningGameStore, "getRunningGames", () => fakeGames);
+            const unpatchGameForPid = Patcher.instead(RunningGameStore, "getGameForPID", (_, [gamePid]) => fakeGames.find(x => x.pid === gamePid));
             FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames });
 
             const heartbeatHandler = this.createHeartbeatHandler(quest, taskName, secondsNeeded, () => stopSpoofing());
@@ -980,7 +981,7 @@ class AutoQuestComplete {
 
             FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
             const minutesLeft = Math.ceil((secondsNeeded - secondsDone) / SECONDS_PER_MINUTE);
-            Logger.info(this._config.info.name, `Spoofed game to ${this._activeQuestName}. Wait ~${minutesLeft} min.`);
+            Logger.info(`Spoofed game to ${this._activeQuestName}. Wait ~${minutesLeft} min.`);
             UI.showToast(`Spoofed game to ${this._activeQuestName}. Wait ~${minutesLeft} min.`, { type: "info" });
         }).catch(err => this.reportAsyncError(err, signal));
     }
@@ -989,7 +990,7 @@ class AutoQuestComplete {
         const { FluxDispatcher, ApplicationStreamingStore } = dependencies;
         if (!this.hasApplicationId()) return;
         if (!this.hasDependencies(dependencies, ["FluxDispatcher", "ApplicationStreamingStore"])) return;
-        const unpatchStream = Patcher.instead(this._config.info.name, ApplicationStreamingStore, "getStreamerActiveStreamMetadata", () => ({
+        const unpatchStream = Patcher.instead(ApplicationStreamingStore, "getStreamerActiveStreamMetadata", () => ({
             id: this._activeAppId,
             pid,
             sourceName: null
@@ -1001,7 +1002,7 @@ class AutoQuestComplete {
         }, this._runCleanups);
         FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
         const minutesLeft = Math.ceil((secondsNeeded - secondsDone) / SECONDS_PER_MINUTE);
-        Logger.info(this._config.info.name, `Spoofed stream to ${this._activeQuestName}. Stream ~${minutesLeft} min. (Need at least one VC peer)`);
+        Logger.info(`Spoofed stream to ${this._activeQuestName}. Stream ~${minutesLeft} min. (Need at least one VC peer)`);
         UI.showToast(`Spoofed stream to ${this._activeQuestName}. Stream ~${minutesLeft} min. (Need at least one VC peer)`, { type: "info" });
     }
 
@@ -1009,13 +1010,13 @@ class AutoQuestComplete {
         const { api } = dependencies;
         const channelId = this.findActivityChannelId();
         if (!channelId) {
-            Logger.error(this._config.info.name, `No private or voice channel found for "${this._activeQuestName}".`);
+            Logger.error(`No private or voice channel found for "${this._activeQuestName}".`);
             UI.showToast(`Could not find a channel to complete "${this._activeQuestName}". Join a server with a voice channel or open a DM.`, { type: "error" });
             return;
         }
         const streamKey = `call:${channelId}:1`;
         (async () => {
-            Logger.info(this._config.info.name, "Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
+            Logger.info("Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
             UI.showToast(`Completing quest ${this._activeQuestName} - ${quest.config.messages.questName}`, { type: "info" });
             let reachedEnd = false;
             const maxHeartbeats = Math.ceil(Math.max(secondsNeeded - secondsDone, 0) / (HEARTBEAT_INTERVAL_MS / MS_PER_SECOND)) + HEARTBEAT_EXTRA_ATTEMPTS;
@@ -1035,7 +1036,7 @@ class AutoQuestComplete {
             }
             if (!reachedEnd && !signal.aborted) throw new Error("Quest did not reach its target in the expected time.");
             if (!reachedEnd || lifecycleSignal.aborted) return;
-            Logger.info(this._config.info.name, "Quest completed!");
+            Logger.info("Quest completed!");
             UI.showToast("Quest completed!", { type: "success" });
         })().catch(err => this.reportAsyncError(err, signal));
     }
@@ -1113,7 +1114,7 @@ class AutoQuestComplete {
             if (this.isValidUpdate(remoteMeta)) this.newUpdateNotify(remoteMeta, fileContent);
         } catch (err) {
             if (!this._abortController || err?.name === "AbortError") return;
-            Logger.error(this._config.info.name, "Update check failed", err);
+            Logger.error("Update check failed", err);
         }
     }
 
@@ -1124,19 +1125,19 @@ class AutoQuestComplete {
             await require("fs").promises.writeFile(target, remoteFile);
         } catch (err) {
             UI.showToast("An error occurred when trying to download the update!", { type: "error" });
-            Logger.error(name, "Could not write the update file", err);
+            Logger.error("Could not write the update file", err);
             return;
         }
         try {
-            const versionInfo = Data.load(name, "currentVersionInfo") ?? {};
-            Data.save(name, "currentVersionInfo", { ...versionInfo, hasShownChangelog: false });
+            const versionInfo = Data.load("currentVersionInfo") ?? {};
+                        Data.save("currentVersionInfo", { ...versionInfo, hasShownChangelog: false });
         } catch (err) {
-            Logger.error(name, "Could not reset the changelog flag", err);
+            Logger.error("Could not reset the changelog flag", err);
         }
     }
 
     newUpdateNotify(remoteMeta, remoteFile) {
-        Logger.info(this._config.info.name, "A new update is available!");
+        Logger.info("A new update is available!");
 
         UI.showNotification({
             title: `${this._config.info.name} Update Available!`,
