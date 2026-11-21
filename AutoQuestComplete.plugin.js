@@ -137,6 +137,7 @@ class AutoQuestComplete {
         this._boundHandleQuestChange = this.handleQuestChange.bind(this);
         this._boundNewQuestHandler = this.handleNewQuest.bind(this);
         this._activeQuestId = null;
+        this._activeAppId = null;
         this._activeQuestName = null;
         this._unsupportedQuests = new Set();
         this._storedUnsupportedQuests = {};
@@ -205,8 +206,7 @@ class AutoQuestComplete {
             );
 
             if (quest) {
-                this._activeQuestId = quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id;
-                this._activeQuestName = this.getQuestName(quest);
+                this.activateQuest(quest);
                 this.runQuest(quest);
             }
         } catch (e) {
@@ -368,6 +368,16 @@ class AutoQuestComplete {
     }
 
     
+    resolveApplicationId(quest) {
+        return quest?.config?.application?.id ?? this.getQuestApplicationId(quest);
+    }
+
+    activateQuest(quest) {
+        this._activeQuestId = quest.id;
+        this._activeAppId = this.resolveApplicationId(quest);
+        this._activeQuestName = this.getQuestName(quest);
+    }
+
     getQuestName(quest) {
         return quest?.config?.messages?.questName ?? quest?.config?.messages?.gameTitle ?? "Unknown Quest";
     }
@@ -539,7 +549,7 @@ class AutoQuestComplete {
     }
 
     hasApplicationId() {
-        if (this._activeQuestId) return true;
+        if (this._activeAppId) return true;
         Logger.error(this._config.info.name, `Could not resolve the application id for "${this._activeQuestName}".`);
         UI.showToast(`Could not resolve the application id for "${this._activeQuestName}".`, { type: "error" });
         return false;
@@ -581,7 +591,7 @@ class AutoQuestComplete {
             new Date(x.config.expiresAt).getTime() > Date.now()
         );
 
-        if (new_quest && new_quest !== quest && this.settings.enableNotify && !this._notifiedQuests.has(new_quest.config.application?.id ?? this.getQuestApplicationId(new_quest) ?? new_quest.id)) {
+        if (new_quest && new_quest !== quest && this.settings.enableNotify && !this._notifiedQuests.has(new_quest.id)) {
             if (!this.shouldNotifyForQuest(new_quest)) return;
             if (!this.settings.notifyUnsupported && !this.isQuestSupported(new_quest)) {
                 Logger.info(this._config.info.name, `Skipping notification for "${this.getQuestName(new_quest)}", coz its task can't be completed by the plugin.`);
@@ -599,7 +609,7 @@ class AutoQuestComplete {
             //         }
             //     ]
             // });
-            this._notifiedQuests.add(new_quest.config.application?.id ?? this.getQuestApplicationId(new_quest) ?? new_quest.id);
+            this._notifiedQuests.add(new_quest.id);
             this.showQuestNotification(new_quest);
         }
     }
@@ -696,13 +706,13 @@ class AutoQuestComplete {
                 {
                     label: "Remind Me Later",
                     onClick: () => {
-                        const existing_reminder = this._remindersTime.get(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id);
+                        const existing_reminder = this._remindersTime.get(quest.id);
                         if (existing_reminder) clearTimeout(existing_reminder);
                         const reminderTimeout = setTimeout(() => {
-                            this._remindersTime.delete(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id);
+                            this._remindersTime.delete(quest.id);
                             this.showQuestNotification(quest, true);
                         }, 60 * 60 * 1000);
-                        this._remindersTime.set(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id, reminderTimeout);
+                        this._remindersTime.set(quest.id, reminderTimeout);
                     }
                 }
             ]
@@ -718,10 +728,8 @@ class AutoQuestComplete {
         );
         // Logger.info(this._config.info.name, "Quest: ", quest);
 
-        if (quest && (quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id) !== this._activeQuestId) {
-            this._activeQuestId = quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id;
-            this._activeQuestName = this.getQuestName(quest);
-            this._activeAppId = this.getQuestApplicationId(quest);
+        if (quest && quest.id !== this._activeQuestId) {
+            this.activateQuest(quest);
             UI.showToast(`New quest found: ${this._activeQuestName}`, {type:"info"});
             this.runQuest(quest);
         }
@@ -742,14 +750,9 @@ class AutoQuestComplete {
                 return;
             }
 
-            if (this._remindersTime.has(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id)) {
-                clearTimeout(this._remindersTime.get(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id));
-                this._remindersTime.delete(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id);
-            }
-
-            if (this._notifiedQuests.has(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id)) {
-                this._notifiedQuests.delete(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id);
-            }
+            clearTimeout(this._remindersTime.get(quest.id));
+            this._remindersTime.delete(quest.id);
+            this._notifiedQuests.delete(quest.id);
 
             const pid = Math.floor(Math.random() * 30000) + 1000;
             // const tasked = quest.config.taskConfigV2 ?? quest.config.taskConfig;
@@ -807,7 +810,7 @@ class AutoQuestComplete {
             else if (taskName === "PLAY_ON_DESKTOP") {
                 if (!this.hasApplicationId()) return;
                 if (!this.hasDependencies(dependencies, ["FluxDispatcher", "RunningGameStore"])) return;
-                this.request(api, "get", { url: `/applications/public?application_ids=${this._activeQuestId}` }, signal).then(res => {
+                this.request(api, "get", { url: `/applications/public?application_ids=${this._activeAppId}` }, signal).then(res => {
                     if (signal.aborted) return;
                     const appData = res?.body?.[0];
                     if (!appData?.name) throw new Error("Application data not found.");
@@ -818,7 +821,7 @@ class AutoQuestComplete {
                         exePath: `c:/program files/${appData.name.toLowerCase()}/${exeName}`,
                         hidden: false,
                         isLauncher: false,
-                        id: this._activeQuestId,
+                        id: this._activeAppId,
                         name: appData.name,
                         pid: pid,
                         pidPath: [pid],
@@ -848,7 +851,7 @@ class AutoQuestComplete {
                 if (!this.hasApplicationId()) return;
                 if (!this.hasDependencies(dependencies, ["FluxDispatcher", "ApplicationStreamingStore"])) return;
                 const unpatchStream = Patcher.instead(this._config.info.name, ApplicationStreamingStore, "getStreamerActiveStreamMetadata", () => ({
-                    id: this._activeQuestId,
+                    id: this._activeAppId,
                     pid,
                     sourceName: null
                 }));
