@@ -1,9 +1,10 @@
 /**
  * @name AutoQuestComplete
- * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
+ * @description Automatically completes quests for you. WARNING: Discord prohibits automating quest completion; using this plugin may get your account flagged or banned. Use at your own risk. Based on a script by @aamiaa.
  * @version 0.10.0
- * @author @aamiaa published by Xenon Colt
- * @authorLink https://github.com/aamiaa
+ * @author Xenon Colt
+ * @authorId 709210314230726776
+ * @authorLink https://github.com/xenoncolt
  * @website https://github.com/xenoncolt/AutoQuestComplete
  * @source https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js
  * @invite vJRe78YmN8
@@ -13,19 +14,7 @@ const config = {
     main: 'AutoQuestComplete.plugin.js',
     info: {
         name: 'AutoQuestComplete',
-        authorId: "709210314230726776",
-        website: "https://xenoncolt.dev",
-        version: "0.10.0",
-        description: "Automatically completes quests for you",
-        author: [
-            {
-                name: "@aamiaa",
-                plugin_author: "Xenon Colt",
-                github_username: "xenoncolt",
-            }
-        ],
         github: "https://github.com/xenoncolt/AutoQuestComplete",
-        invite: "vJRe78YmN8",
         github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
     },
     changelog: [
@@ -142,7 +131,8 @@ const UPDATE_NOTIFICATION_ID = "AutoQuestComplete-update";
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
 
 class AutoQuestComplete {
-    constructor() {
+    constructor(meta) {
+        this._version = meta?.version ?? "0.0.0";
         this._config = config;
         this._questsStore = null;
         this._router = null;
@@ -167,7 +157,8 @@ class AutoQuestComplete {
     }
 
     showChangelogOnce() {
-        const { name, version } = this._config.info;
+        const { name } = this._config.info;
+        const version = this._version;
         try {
             const stored = Data.load(name, "currentVersionInfo");
             const versionInfo = { hasShownChangelog: false, ...stored, version };
@@ -1040,7 +1031,7 @@ class AutoQuestComplete {
     isValidUpdate(remoteMeta) {
         return remoteMeta.name === this._config.info.name &&
             SEMVER_PATTERN.test(remoteMeta.version ?? "") &&
-            Utils.semverCompare(this._config.info.version, remoteMeta.version) > 0;
+            Utils.semverCompare(this._version, remoteMeta.version) > 0;
     }
 
     async checkForUpdate() {
