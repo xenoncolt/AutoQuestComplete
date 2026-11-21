@@ -177,6 +177,7 @@ const MAX_REPORT_STACK_LENGTH = 1500;
 const UPDATE_TIMEOUT_MS = 15000;
 const UPDATE_NOTIFICATION_ID = "AutoQuestComplete-update";
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const UPDATE_NOTIFICATION_DURATION_MS = 60 * 60 * 1000;
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
 const MIN_BETTERDISCORD_VERSION = "1.14.5";
 
@@ -1175,7 +1176,7 @@ class AutoQuestComplete {
             content: `Version ${remoteMeta.version} is now available (installed: ${this._version}).`,
             id: UPDATE_NOTIFICATION_ID,
             type: "info",
-            duration: Infinity,
+            duration: UPDATE_NOTIFICATION_DURATION_MS,
             actions: [
                 {
                     label: "Update Now",
