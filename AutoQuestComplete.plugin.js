@@ -527,6 +527,17 @@ class AutoQuestComplete {
         UI.showToast(`Quest "${this._activeQuestName}" failed: ${reason}`, { type: "error" });
     }
 
+    findActivityChannelId() {
+        const privateChannelId = Webpack.Stores.ChannelStore?.getSortedPrivateChannels?.()?.[0]?.id;
+        if (privateChannelId) return privateChannelId;
+        const guilds = Webpack.Stores.GuildChannelStore?.getAllGuilds?.() ?? {};
+        for (const guild of Object.values(guilds)) {
+            const voiceChannelId = guild?.VOCAL?.[0]?.channel?.id;
+            if (voiceChannelId) return voiceChannelId;
+        }
+        return null;
+    }
+
     hasDependencies(dependencies, names) {
         const missing = names.filter(name => !dependencies[name]);
         if (!missing.length) return true;
@@ -845,8 +856,12 @@ class AutoQuestComplete {
                 UI.showToast(`Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min. (Need at least one VC peer)`, { type: "info" });
             }
             else if (taskName === "PLAY_ACTIVITY") {
-                const channelId = Webpack.Stores.ChannelStore.getSortedPrivateChannels()[0]?.id ||
-                    Object.values(Webpack.Stores.GuildChannelStore.getAllGuilds()).find(x => x && x.VOCAL.length > 0).VOCAL[0].channel.id;
+                const channelId = this.findActivityChannelId();
+                if (!channelId) {
+                    Logger.error(this._config.info.name, `No private or voice channel found for "${this._activeQuestName}".`);
+                    UI.showToast(`Could not find a channel to complete "${this._activeQuestName}". Join a server with a voice channel or open a DM.`, { type: "error" });
+                    return;
+                }
                 const streamKey = `call:${channelId}:1`;
                 (async () => {
                     Logger.info(this._config.info.name, "Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
