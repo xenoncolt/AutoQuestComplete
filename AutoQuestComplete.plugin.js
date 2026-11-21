@@ -538,6 +538,28 @@ class AutoQuestComplete {
         return null;
     }
 
+    hasApplicationId() {
+        if (this._activeQuestId) return true;
+        Logger.error(this._config.info.name, `Could not resolve the application id for "${this._activeQuestName}".`);
+        UI.showToast(`Could not resolve the application id for "${this._activeQuestName}".`, { type: "error" });
+        return false;
+    }
+
+    createHeartbeatHandler(quest, taskName, secondsNeeded, onComplete) {
+        return data => {
+            const status = data?.userStatus;
+            if (!status || (status.questId && status.questId !== quest.id)) return;
+            const progress = quest.config.configVersion === 1 ? status.streamProgressSeconds : Math.floor(status.progress?.[taskName]?.value);
+            if (!Number.isFinite(progress)) return;
+            Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
+            UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
+            if (progress < secondsNeeded) return;
+            Logger.info(this._config.info.name, "Quest completed!");
+            UI.showToast("Quest completed!", { type: "success" });
+            onComplete();
+        };
+    }
+
     hasDependencies(dependencies, names) {
         const missing = names.filter(name => !dependencies[name]);
         if (!missing.length) return true;
@@ -731,24 +753,28 @@ class AutoQuestComplete {
 
             const pid = Math.floor(Math.random() * 30000) + 1000;
             // const tasked = quest.config.taskConfigV2 ?? quest.config.taskConfig;
-            const taskName = [...SUPPORTED_TASKS, "ACHIEVEMENT_IN_ACTIVITY"].find(x => quest.config.taskConfigV2.tasks[x] != null);
+            const tasks = quest.config?.taskConfigV2?.tasks ?? {};
+            const taskName = [...SUPPORTED_TASKS, "ACHIEVEMENT_IN_ACTIVITY"].find(x => tasks[x] != null);
 
             if (!taskName) {
                 if (this._unsupportedQuests.has(quest.id)) return;
                 this.markQuestUnsupported(quest);
-                const taskList = Object.keys(quest.config.taskConfigV2.tasks).join(", ");
                 Logger.info(this._config.info.name, `${this._activeQuestName} is not supported by this plugin. "Xbox and Playstation" Task.`);
                 UI.showToast(`Skipping ${this._activeQuestName}.`, { type: "warning" });
                 this.setTimer(() => this.handleQuestChange(), 1000);
                 return;
             }
 
-            const secondsNeeded = quest.config.taskConfigV2.tasks[taskName].target;
+            const secondsNeeded = tasks[taskName].target;
+            if (taskName !== "ACHIEVEMENT_IN_ACTIVITY" && !Number.isFinite(secondsNeeded)) {
+                Logger.error(this._config.info.name, `Quest "${this._activeQuestName}" has no valid target for ${taskName}.`);
+                UI.showToast(`Quest "${this._activeQuestName}" has an unexpected task format.`, { type: "error" });
+                return;
+            }
             let secondsDone = quest.userStatus?.progress?.[taskName]?.value ?? 0;
 
             if (taskName === "WATCH_VIDEO" || taskName === "WATCH_VIDEO_ON_MOBILE") {
                 const speed = 7;
-                const enrolledAt = new Date(quest.userStatus.enrolledAt).getTime();
                 let isFinished = false;
                 let reachedEnd = false;
                 (async () => {
@@ -779,15 +805,12 @@ class AutoQuestComplete {
                 UI.showToast(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / speed)} sec.`, { type: "info" });
             }
             else if (taskName === "PLAY_ON_DESKTOP") {
-                if (!this._activeQuestId) {
-                    Logger.error(this._config.info.name, `Could not resolve the application id for "${this._activeQuestName}".`);
-                    UI.showToast(`Could not resolve the application id for "${this._activeQuestName}".`, { type: "error" });
-                    return;
-                }
+                if (!this.hasApplicationId()) return;
                 if (!this.hasDependencies(dependencies, ["FluxDispatcher", "RunningGameStore"])) return;
                 this.request(api, "get", { url: `/applications/public?application_ids=${this._activeQuestId}` }, signal).then(res => {
                     if (signal.aborted) return;
-                    const appData = res.body[0];
+                    const appData = res?.body?.[0];
+                    if (!appData?.name) throw new Error("Application data not found.");
                     const exeName = appData.executables?.find(x => x.os === "win32")?.name?.replace(">", "") ?? appData.name.replace(/[\/\\:*?"<>|]/g, "");
                     const fakeGame = {
                         cmdLine: `C:\\Program Files\\${appData.name}\\${exeName}`,
@@ -808,50 +831,33 @@ class AutoQuestComplete {
                     const unpatchGameForPid = Patcher.instead(this._config.info.name, RunningGameStore, "getGameForPID", (_, [gamePid]) => fakeGames.find(x => x.pid === gamePid));
                     FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames });
 
+                    const heartbeatHandler = this.createHeartbeatHandler(quest, taskName, secondsNeeded, () => stopSpoofing());
                     const stopSpoofing = this.addCleanup(() => {
                         unpatchGames?.();
                         unpatchGameForPid?.();
                         FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
-                        FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                        FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
                     }, this._runCleanups);
 
-                    let fn = data => {
-                        let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.PLAY_ON_DESKTOP.value);
-                        Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
-                        UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
-                        if (progress >= secondsNeeded) {
-                            Logger.info(this._config.info.name, "Quest completed!");
-                            UI.showToast("Quest completed!", { type: "success" });
-                            stopSpoofing();
-                        }
-                    };
-                    FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                    FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
                     Logger.info(this._config.info.name, `Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min.`);
                     UI.showToast(`Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min.`, { type: "info" });
                 }).catch(err => this.reportAsyncError(err, signal));
             }
             else if (taskName === "STREAM_ON_DESKTOP") {
+                if (!this.hasApplicationId()) return;
                 if (!this.hasDependencies(dependencies, ["FluxDispatcher", "ApplicationStreamingStore"])) return;
                 const unpatchStream = Patcher.instead(this._config.info.name, ApplicationStreamingStore, "getStreamerActiveStreamMetadata", () => ({
                     id: this._activeQuestId,
                     pid,
                     sourceName: null
                 }));
+                const heartbeatHandler = this.createHeartbeatHandler(quest, taskName, secondsNeeded, () => stopSpoofing());
                 const stopSpoofing = this.addCleanup(() => {
                     unpatchStream?.();
-                    FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                    FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
                 }, this._runCleanups);
-                let fn = data => {
-                    let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.STREAM_ON_DESKTOP.value);
-                    Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
-                    UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
-                    if (progress >= secondsNeeded) {
-                        Logger.info(this._config.info.name, "Quest completed!");
-                        UI.showToast("Quest completed!", { type: "success" });
-                        stopSpoofing();
-                    }
-                };
-                FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
                 Logger.info(this._config.info.name, `Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min. (Need at least one VC peer)`);
                 UI.showToast(`Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min. (Need at least one VC peer)`, { type: "info" });
             }
