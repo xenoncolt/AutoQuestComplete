@@ -127,6 +127,7 @@ const MAX_LISTED_QUESTS = 5;
 const REWARD_SETTING_PREFIX = "reward_";
 const FAKE_PID_MIN = 1000;
 const FAKE_PID_RANGE = 30000;
+const PROGRESS_TOAST_INTERVAL_MS = 60000;
 const MAX_REPORT_STACK_LENGTH = 1500;
 const UPDATE_TIMEOUT_MS = 15000;
 const UPDATE_NOTIFICATION_ID = "AutoQuestComplete-update";
@@ -154,6 +155,7 @@ class AutoQuestComplete {
         this._cleanups = new Set();
         this._runCleanups = new Set();
         this._runController = null;
+        this._lastProgressToast = 0;
         this._abortController = null;
         this.settings = null;
     }
@@ -297,6 +299,7 @@ class AutoQuestComplete {
     startRun() {
         this.endRun();
         this._runController = new AbortController();
+        this._lastProgressToast = 0;
         return this._runController.signal;
     }
 
@@ -582,14 +585,21 @@ class AutoQuestComplete {
         return false;
     }
 
+    reportProgress(progress, secondsNeeded) {
+        Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
+        const now = Date.now();
+        if (now - this._lastProgressToast < PROGRESS_TOAST_INTERVAL_MS) return;
+        this._lastProgressToast = now;
+        UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
+    }
+
     createHeartbeatHandler(quest, taskName, secondsNeeded, onComplete) {
         return data => {
             const status = data?.userStatus;
             if (!status || (status.questId && status.questId !== quest.id)) return;
             const progress = quest.config.configVersion === 1 ? status.streamProgressSeconds : Math.floor(status.progress?.[taskName]?.value);
             if (!Number.isFinite(progress)) return;
-            Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
-            UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
+            this.reportProgress(progress, secondsNeeded);
             if (progress < secondsNeeded) return;
             Logger.info(this._config.info.name, "Quest completed!");
             UI.showToast("Quest completed!", { type: "success" });
@@ -992,8 +1002,7 @@ class AutoQuestComplete {
                 if (signal.aborted) return;
                 const progress = res?.body?.progress?.PLAY_ACTIVITY?.value;
                 if (typeof progress !== "number") throw new Error("Unexpected heartbeat response.");
-                Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
-                UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
+                this.reportProgress(progress, secondsNeeded);
                 await this.sleep(HEARTBEAT_INTERVAL_MS, signal);
                 if (lifecycleSignal.aborted || (signal.aborted && progress < secondsNeeded)) return;
                 if (progress >= secondsNeeded) {
