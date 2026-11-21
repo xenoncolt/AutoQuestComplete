@@ -136,6 +136,7 @@ const NOTIFY_RETRY_MS = 300;
 const NOTIFY_MAX_RETRIES = 3;
 const MAX_LISTED_QUESTS = 5;
 const REWARD_SETTING_PREFIX = "reward_";
+const MAX_REPORT_STACK_LENGTH = 1500;
 const UPDATE_TIMEOUT_MS = 15000;
 const UPDATE_NOTIFICATION_ID = "AutoQuestComplete-update";
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
@@ -565,7 +566,7 @@ class AutoQuestComplete {
 
     reportAsyncError(err, signal) {
         if (signal.aborted) return;
-        const reason = err?.body?.message ?? err?.message ?? "Unknown error";
+        const reason = this.getErrorMessage(err);
         Logger.error(this._config.info.name, `Quest "${this._activeQuestName}" failed`, err);
         UI.showToast(`Quest "${this._activeQuestName}" failed: ${reason}`, { type: "error" });
     }
@@ -993,16 +994,38 @@ class AutoQuestComplete {
                 this.setTimer(() => this.handleQuestChange(), 5000);
             }
         } catch (err) {
-            UI.showConfirmationModal("Error", ["An error occurred while trying to complete the quest. Please reach out to developer with the following information:", `Quest Name: ${this._activeQuestName}`, `Error: ${err.message}`, `Or click to send report to create an issue on github`], {
-                confirmText: "Report Issue",
-                onConfirm: async () => {
-                    const issueTitle = encodeURIComponent(`Error while completing quest: ${this._activeQuestName}`);
-                    const issueBody = encodeURIComponent(`**Quest Name:** ${this._activeQuestName}\n**Error:** ${err.message}\n**Stack Trace:**\n\`\`\`${err.stack}\`\`\``);
-                    const issueUrl = `https://github.com/xenoncolt/AutoQuestComplete/issues/new?title=${issueTitle}&body=${issueBody}`;
-                    open(issueUrl);
-                },
-            })
+            this.showErrorModal(err);
         }
+    }
+
+    getErrorMessage(err) {
+        return err?.body?.message ?? err?.message ?? String(err ?? "Unknown error");
+    }
+
+    // Removes local user paths so the report does not leak them.
+    sanitizeStack(stack) {
+        return String(stack ?? "No stack trace available")
+            .replace(/[A-Za-z]:\\Users\\[^\\\s)]+/g, "<user>")
+            .replace(/\/(?:Users|home)\/[^/\s)]+/g, "/<user>")
+            .slice(0, MAX_REPORT_STACK_LENGTH);
+    }
+
+    showErrorModal(err) {
+        const questName = this._activeQuestName ?? "Unknown Quest";
+        const message = this.getErrorMessage(err);
+        UI.showConfirmationModal("Error", [
+            "An error occurred while trying to complete the quest. Please reach out to the developer with the following information:",
+            `Quest Name: ${questName}`,
+            `Error: ${message}`,
+            "Report Issue opens a prefilled GitHub issue with the error and a stack trace (local user paths removed). Review it before submitting."
+        ], {
+            confirmText: "Report Issue",
+            onConfirm: () => {
+                const title = encodeURIComponent(`Error while completing quest: ${questName}`);
+                const body = encodeURIComponent(`**Quest Name:** ${questName}\n**Error:** ${message}\n**Stack Trace:**\n\`\`\`\n${this.sanitizeStack(err?.stack)}\n\`\`\``);
+                window.open(`${this._config.info.github}/issues/new?title=${title}&body=${body}`, "_blank", "noopener,noreferrer");
+            }
+        });
     }
 
     async fetchRemotePlugin() {
