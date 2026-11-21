@@ -170,6 +170,25 @@ describe("update helpers", () => {
     });
 });
 
+describe("task maps", () => {
+    test("getTaskHandler resolves supported tasks and ignores unknown ones", () => {
+        const plugin = createPlugin();
+        assert.equal(plugin.getTaskHandler("WATCH_VIDEO"), plugin.runWatchVideo);
+        assert.equal(plugin.getTaskHandler("WATCH_VIDEO_ON_MOBILE"), plugin.runWatchVideo);
+        assert.equal(plugin.getTaskHandler("PLAY_ON_XBOX"), undefined);
+        assert.equal(plugin.getTaskHandler("toString"), undefined);
+    });
+
+    test("getQuestTaskInfo builds the label with the duration", () => {
+        const plugin = createPlugin();
+        const quest = target => ({ config: { taskConfigV2: { tasks: { PLAY_ON_DESKTOP: { target } } } } });
+        assert.equal(plugin.getQuestTaskInfo(quest(900)), "Play the game (~15 min)");
+        assert.equal(plugin.getQuestTaskInfo(quest(30)), "Play the game (~30 sec)");
+        assert.equal(plugin.getQuestTaskInfo(quest(0)), "Play the game");
+        assert.equal(plugin.getQuestTaskInfo({}), null);
+    });
+});
+
 describe("isBetterDiscordSupported", () => {
     afterEach(() => { BdApiMock.version = "1.14.5"; });
 

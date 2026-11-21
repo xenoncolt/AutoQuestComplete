@@ -116,6 +116,24 @@ const config = {
 const PLUGIN_NAME = "AutoQuestComplete";
 const { Webpack, UI, Logger, Data, Utils, React, Patcher } = new BdApi(PLUGIN_NAME);
 
+const TASK_LABELS = {
+    WATCH_VIDEO: "Watch a video",
+    WATCH_VIDEO_ON_MOBILE: "Watch a video (mobile)",
+    PLAY_ON_DESKTOP: "Play the game",
+    STREAM_ON_DESKTOP: "Stream the game",
+    PLAY_ACTIVITY: "Play an activity",
+    ACHIEVEMENT_IN_ACTIVITY: "Earn an achievement",
+    PLAY_ON_PLAYSTATION: "Play on PlayStation",
+    PLAY_ON_XBOX: "Play on Xbox"
+};
+const TASK_HANDLERS = {
+    WATCH_VIDEO: "runWatchVideo",
+    WATCH_VIDEO_ON_MOBILE: "runWatchVideo",
+    PLAY_ON_DESKTOP: "runPlayOnDesktop",
+    STREAM_ON_DESKTOP: "runStreamOnDesktop",
+    PLAY_ACTIVITY: "runPlayActivity",
+    ACHIEVEMENT_IN_ACTIVITY: "runAchievementInActivity"
+};
 const SUPPORTED_TASKS = ["WATCH_VIDEO", "WATCH_VIDEO_ON_MOBILE", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY"];
 const API_MAX_RETRIES = 3;
 const API_BASE_BACKOFF_MS = 2000;
@@ -482,22 +500,12 @@ class AutoQuestComplete {
 
     getQuestTaskInfo(quest) {
         const tasks = quest?.config?.taskConfigV2?.tasks ?? {};
-        const labels = {
-            WATCH_VIDEO: "Watch a video",
-            WATCH_VIDEO_ON_MOBILE: "Watch a video (mobile)",
-            PLAY_ON_DESKTOP: "Play the game",
-            STREAM_ON_DESKTOP: "Stream the game",
-            PLAY_ACTIVITY: "Play an activity",
-            ACHIEVEMENT_IN_ACTIVITY: "Earn an achievement",
-            PLAY_ON_PLAYSTATION: "Play on PlayStation",
-            PLAY_ON_XBOX: "Play on Xbox"
-        };
-        const taskName = Object.keys(labels).find(x => tasks[x] != null);
+        const taskName = Object.keys(TASK_LABELS).find(x => tasks[x] != null);
         if (!taskName) return null;
         const seconds = tasks[taskName]?.target ?? 0;
-        if (!seconds) return labels[taskName];
+        if (!seconds) return TASK_LABELS[taskName];
         const duration = seconds >= SECONDS_PER_MINUTE ? `${Math.round(seconds / SECONDS_PER_MINUTE)} min` : `${seconds} sec`;
-        return `${labels[taskName]} (~${duration})`;
+        return `${TASK_LABELS[taskName]} (~${duration})`;
     }
 
     formatRelativeTime(dateStr) {
@@ -895,14 +903,7 @@ class AutoQuestComplete {
     }
 
     getTaskHandler(taskName) {
-        return {
-            WATCH_VIDEO: this.runWatchVideo,
-            WATCH_VIDEO_ON_MOBILE: this.runWatchVideo,
-            PLAY_ON_DESKTOP: this.runPlayOnDesktop,
-            STREAM_ON_DESKTOP: this.runStreamOnDesktop,
-            PLAY_ACTIVITY: this.runPlayActivity,
-            ACHIEVEMENT_IN_ACTIVITY: this.runAchievementInActivity
-        }[taskName];
+        return this[TASK_HANDLERS[taskName]];
     }
 
     skipUnsupportedQuest(quest) {
