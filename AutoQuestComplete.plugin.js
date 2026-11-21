@@ -14,8 +14,7 @@ const config = {
     main: 'AutoQuestComplete.plugin.js',
     info: {
         name: 'AutoQuestComplete',
-        github: "https://github.com/xenoncolt/AutoQuestComplete",
-        github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
+        github: "https://github.com/xenoncolt/AutoQuestComplete"
     },
     changelog: [
         {
@@ -162,6 +161,7 @@ const MIN_BETTERDISCORD_VERSION = "1.14.5";
 class AutoQuestComplete {
     constructor(meta) {
         this._version = meta?.version ?? "0.0.0";
+        this._sourceUrl = meta?.source ?? "";
         this._config = config;
         this._questsStore = null;
         this._router = null;
@@ -1097,7 +1097,8 @@ class AutoQuestComplete {
 
     async fetchRemotePlugin() {
         const signal = AbortSignal.any([this._abortController.signal, AbortSignal.timeout(UPDATE_TIMEOUT_MS)]);
-        const response = await fetch(this._config.info.github_raw, { signal });
+        if (!this._sourceUrl.startsWith("https://")) throw new Error("The plugin header has no valid @source URL");
+        const response = await fetch(this._sourceUrl, { signal });
         if (!response.ok) throw new Error(`Update server responded with ${response.status}`);
         const fileContent = await response.text();
         return { fileContent, remoteMeta: this.parseMeta(fileContent) };
