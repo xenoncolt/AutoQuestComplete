@@ -128,6 +128,13 @@ const HEARTBEAT_INTERVAL_MS = 20000;
 const HEARTBEAT_EXTRA_ATTEMPTS = 10;
 const HTTP_TOO_MANY_REQUESTS = 429;
 const HTTP_SERVER_ERROR = 500;
+const NOTIFICATION_ID = "AutoQuestComplete-new-quests";
+const NOTIFICATION_DURATION_MS = 5 * 60 * 1000;
+const REMINDER_DELAY_MS = 60 * 60 * 1000;
+const NOTIFY_DEBOUNCE_MS = 750;
+const NOTIFY_RETRY_MS = 300;
+const NOTIFY_MAX_RETRIES = 3;
+const MAX_LISTED_QUESTS = 5;
 
 class AutoQuestComplete {
     constructor() {
@@ -135,14 +142,17 @@ class AutoQuestComplete {
         this._questsStore = Webpack.Stores.QuestStore;
         this._router = null;
         this._boundHandleQuestChange = this.handleQuestChange.bind(this);
-        this._boundNewQuestHandler = this.handleNewQuest.bind(this);
+        this._boundNewQuestHandler = this.scheduleNewQuestCheck.bind(this);
         this._activeQuestId = null;
         this._activeAppId = null;
         this._activeQuestName = null;
         this._unsupportedQuests = new Set();
         this._storedUnsupportedQuests = {};
         this._notifiedQuests = new Set();
-        this._remindersTime = new Map();
+        this._notifyDebounce = null;
+        this._notification = null;
+        this._notificationQuestIds = null;
+        this._notifyRetries = 0;
         this._timers = new Set();
         this._cleanups = new Set();
         this._runCleanups = new Set();
@@ -222,13 +232,14 @@ class AutoQuestComplete {
             this._questsStore.removeChangeListener(this._boundHandleQuestChange);
             this._questsStore.removeChangeListener(this._boundNewQuestHandler);
         }
-        for (const timeout of this._remindersTime.values()) {
-            clearTimeout(timeout);
-        }
         for (const timeout of this._timers) {
             clearTimeout(timeout);
         }
         this._timers.clear();
+        this._notification?.close?.();
+        this._notification = null;
+        this._notificationQuestIds = null;
+        this._notifyRetries = 0;
         this.endRun();
         this.runCleanups();
         Patcher.unpatchAll(this._config.info.name);
@@ -236,7 +247,11 @@ class AutoQuestComplete {
         this._activeQuestName = null;
         this._activeAppId = null;
         this._notifiedQuests.clear();
-        this._remindersTime.clear();
+    }
+
+    clearTimer(timer) {
+        clearTimeout(timer);
+        this._timers.delete(timer);
     }
 
     setTimer(callback, delay) {
@@ -578,40 +593,23 @@ class AutoQuestComplete {
         return false;
     }
 
+    isQuestNotifiable(quest) {
+        return !quest.userStatus?.enrolledAt &&
+            !quest.userStatus?.completedAt &&
+            new Date(quest.config?.expiresAt).getTime() > Date.now() &&
+            this.shouldNotifyForQuest(quest) &&
+            (this.settings.notifyUnsupported || this.isQuestSupported(quest));
+    }
+
+    scheduleNewQuestCheck() {
+        this.clearTimer(this._notifyDebounce);
+        this._notifyDebounce = this.setTimer(() => this.handleNewQuest(), NOTIFY_DEBOUNCE_MS);
+    }
+
     handleNewQuest() {
-        const quest = this.getQuests().find(x =>
-            x.userStatus?.enrolledAt &&
-            !x.userStatus?.completedAt &&
-            new Date(x.config.expiresAt).getTime() > Date.now()
-        );
-
-        const new_quest = this.getQuests().find(x =>
-            !x.userStatus?.enrolledAt &&
-            !x.userStatus?.completedAt &&
-            new Date(x.config.expiresAt).getTime() > Date.now()
-        );
-
-        if (new_quest && new_quest !== quest && this.settings.enableNotify && !this._notifiedQuests.has(new_quest.id)) {
-            if (!this.shouldNotifyForQuest(new_quest)) return;
-            if (!this.settings.notifyUnsupported && !this.isQuestSupported(new_quest)) {
-                Logger.info(this._config.info.name, `Skipping notification for "${this.getQuestName(new_quest)}", coz its task can't be completed by the plugin.`);
-                return;
-            }
-            // UI.showNotice("New quest available! Please accept it to start auto completing.", {
-            //     type: "info",
-            //     timeout: 5 * 60 * 1000,
-            //     buttons: [
-            //         {
-            //             label: "Go to Quests",
-            //             onClick: () => {
-            //                 open(`/quests/${new_quest.id}`);
-            //             }
-            //         }
-            //     ]
-            // });
-            this._notifiedQuests.add(new_quest.id);
-            this.showQuestNotification(new_quest);
-        }
+        if (!this.settings.enableNotify) return;
+        const freshQuests = this.getQuests().filter(x => !this._notifiedQuests.has(x.id) && this.isQuestNotifiable(x));
+        if (freshQuests.length) this.showQuestNotification(freshQuests);
     }
 
 
@@ -685,38 +683,98 @@ class AutoQuestComplete {
     }
 
 
-    showQuestNotification(quest, reminder = false) {
-        if (!quest) return;
-        const title = reminder ? `Reminder: New Quest Available!` : `New Quest Available!`;
-        
-        UI.showNotification({
-            title: title,
-            content: this.buildNotificationContent(quest),
-            icon: this.buildQuestIcon(quest),
-            type: "info",
-            duration: 5 * 60 * 1000,
-            actions: [
-                {
-                    label: "Go to Quests",
-                    onClick: async () => {
-                        await this.openQuests();
-                        this.focusQuestContainer(quest);
-                    }
-                },
-                {
-                    label: "Remind Me Later",
-                    onClick: () => {
-                        const existing_reminder = this._remindersTime.get(quest.id);
-                        if (existing_reminder) clearTimeout(existing_reminder);
-                        const reminderTimeout = setTimeout(() => {
-                            this._remindersTime.delete(quest.id);
-                            this.showQuestNotification(quest, true);
-                        }, 60 * 60 * 1000);
-                        this._remindersTime.set(quest.id, reminderTimeout);
-                    }
+    pluralize(count, noun) {
+        return `${count} ${noun}${count === 1 ? "" : "s"}`;
+    }
+
+    buildSummaryContent(quests) {
+        const supported = quests.filter(x => this.isQuestSupported(x));
+        const unsupportedCount = quests.length - supported.length;
+        const listed = supported.slice(0, MAX_LISTED_QUESTS);
+        const hiddenCount = supported.length - listed.length;
+        const e = React.createElement;
+        const mutedStyle = { opacity: 0.8 };
+        const describe = quest => {
+            const expiresIn = this.formatRelativeTime(quest.config?.expiresAt);
+            const details = [this.getRewardText(quest), this.getQuestTaskInfo(quest), expiresIn && `expires in ${expiresIn}`].filter(Boolean).join(" • ");
+            return details ? ` - ${details}` : "";
+        };
+
+        return e("div", { style: { display: "flex", flexDirection: "column", gap: "3px" } },
+            supported.length ? e("div", { style: { marginBottom: "2px" } }, "Accept a quest to start auto-completing.") : null,
+            ...listed.map(quest => e("div", { key: quest.id }, e("strong", null, this.getQuestName(quest)), describe(quest))),
+            hiddenCount > 0 ? e("div", { style: mutedStyle }, `+${hiddenCount} more`) : null,
+            unsupportedCount > 0 ? e("div", { style: mutedStyle }, `${this.pluralize(unsupportedCount, "unsupported quest")} (complete manually)`) : null
+        );
+    }
+
+    buildNotificationAppearance(quests, reminder) {
+        const prefix = reminder ? "Reminder: " : "";
+        if (quests.length === 1) {
+            return {
+                title: `${prefix}New Quest Available!`,
+                content: this.buildNotificationContent(quests[0]),
+                icon: this.buildQuestIcon(quests[0])
+            };
+        }
+        return {
+            title: `${prefix}${this.pluralize(quests.length, "new quest")} available`,
+            content: this.buildSummaryContent(quests)
+        };
+    }
+
+    buildNotificationActions(quests) {
+        const questIds = new Set(quests.map(x => x.id));
+        return [
+            {
+                label: "Go to Quests",
+                onClick: async () => {
+                    await this.openQuests();
+                    if (quests.length === 1) this.focusQuestContainer(quests[0]);
                 }
-            ]
-        })
+            },
+            {
+                label: "Remind Me Later",
+                onClick: () => {
+                    this.setTimer(() => {
+                        if (!this.settings.enableNotify) return;
+                        this.showQuestNotification(this.getQuests().filter(x => questIds.has(x.id) && this.isQuestNotifiable(x)), true);
+                    }, REMINDER_DELAY_MS);
+                }
+            }
+        ];
+    }
+
+    // Shows one combined notification; quests of a still visible notification are merged into the new one.
+    showQuestNotification(quests, reminder = false) {
+        const visibleIds = this._notification?.isVisible?.() ? this._notificationQuestIds : null;
+        const visibleQuests = visibleIds ? this.getQuests().filter(x => visibleIds.has(x.id) && this.isQuestNotifiable(x)) : [];
+        const allQuests = [...visibleQuests, ...quests.filter(x => !visibleIds?.has(x.id))];
+        if (!allQuests.length) return;
+
+        this._notification?.close?.();
+        const questIds = new Set(allQuests.map(x => x.id));
+        const notification = UI.showNotification({
+            id: NOTIFICATION_ID,
+            ...this.buildNotificationAppearance(allQuests, reminder),
+            type: "info",
+            duration: NOTIFICATION_DURATION_MS,
+            actions: this.buildNotificationActions(allQuests),
+            onClose: () => {
+                if (this._notificationQuestIds !== questIds) return;
+                this._notification = null;
+                this._notificationQuestIds = null;
+            }
+        });
+
+        if (!notification) {
+            if (this._notifyRetries++ < NOTIFY_MAX_RETRIES) this.setTimer(() => this.showQuestNotification(allQuests, reminder), NOTIFY_RETRY_MS);
+            return;
+        }
+        this._notifyRetries = 0;
+        this._notification = notification;
+        this._notificationQuestIds = questIds;
+        for (const quest of allQuests) this._notifiedQuests.add(quest.id);
     }
 
     handleQuestChange() {
@@ -750,8 +808,6 @@ class AutoQuestComplete {
                 return;
             }
 
-            clearTimeout(this._remindersTime.get(quest.id));
-            this._remindersTime.delete(quest.id);
             this._notifiedQuests.delete(quest.id);
 
             const pid = Math.floor(Math.random() * 30000) + 1000;
