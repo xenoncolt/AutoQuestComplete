@@ -53,6 +53,7 @@ const config = {
                 "Constants replace magic numbers, dead code was removed and ESLint reports no problems",
                 "Logging, data storage and patching use a plugin-scoped BetterDiscord API instance",
                 "Task labels and handlers are module constants, and unit tests cover the core helpers",
+                "Discord modules are looked up with the faster default-export search first, with the previous search as fallback",
                 "The README documents the minimum BetterDiscord version, self-updates and the risk of automating quests"
             ]
         }
