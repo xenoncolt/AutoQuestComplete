@@ -684,7 +684,8 @@ class AutoQuestComplete {
     }
 
     getRouter() {
-        this._router ??= Webpack.getModule(m => m?.transitionTo && m?.replaceWith && m?.getHistory, { searchExports: true });
+        this._router ??= Webpack.getByKeys("transitionTo", "replaceWith", "getHistory")
+            ?? Webpack.getByKeys("transitionTo", "replaceWith", "getHistory", { searchExports: true });
         return this._router;
     }
 
