@@ -1,7 +1,7 @@
 /**
  * @name AutoQuestComplete
- * @description Automatically completes quests for you. WARNING: Discord prohibits automating quest completion; using this plugin may get your account flagged or banned. Use at your own risk. Based on a script by @aamiaa.
- * @version 0.10.0
+ * @description Automatically completes quests for you. Requires BetterDiscord 1.14.5 or newer. WARNING: Discord prohibits automating quest completion; using this plugin may get your account flagged or banned. Use at your own risk. Based on a script by @aamiaa.
+ * @version 0.11.0
  * @author Xenon Colt
  * @authorId 709210314230726776
  * @authorLink https://github.com/xenoncolt
@@ -22,10 +22,33 @@ const config = {
             title: "New Features & Improvements",
             type: "added",
             items: [
-                "The quests AutoQuestComplete can't complete, like \"launch the game\" achievement quests and PlayStation/Xbox quests, no longer trigger the new quest notification",
-                "New **Notify For Unsupported Quests** setting (off by default)",
-                "The **Unsupported Quest Task** popup is now saved on config, so it only shows once per quest instead of every time Discord starts",
+                "New quests are now announced in **one combined notification** (\"3 new quests available\") with the real count, a short list and the number of quests that must be completed manually",
+                "Requires **BetterDiscord 1.14.5** or newer",
+                "Quest progress toasts are limited to one per minute",
+                "Update checks now validate the downloaded plugin file before offering it",
                 "Thanks for the help griffinsectio and Thanks for creating issue TouhouJevil"
+            ]
+        },
+        {
+            title: "Fixes & Stability",
+            type: "fixed",
+            items: [
+                "Disabling the plugin now removes all patches, listeners, timers and running quest loops",
+                "Fake game and stream patches use BetterDiscord's Patcher and are removed when a quest finishes or the plugin stops",
+                "The plugin no longer deletes `window.$` and no longer breaks when Discord modules cannot be found",
+                "Network and API errors are retried with backoff and shown as readable errors",
+                "Quests are tracked by their id, so two quests with the same name no longer interfere",
+                "Settings and stored data load safely; reward settings keep their saved values",
+                "\"Go to Quests\" opens the quests page reliably and restores the page's focus state afterwards",
+                "The error report no longer includes local user paths"
+            ]
+        },
+        {
+            title: "Code Quality",
+            type: "improved",
+            items: [
+                "Quest handling is split into one handler per task type",
+                "Constants replace magic numbers, dead code was removed and ESLint reports no problems"
             ]
         }
     ],
@@ -132,6 +155,7 @@ const MAX_REPORT_STACK_LENGTH = 1500;
 const UPDATE_TIMEOUT_MS = 15000;
 const UPDATE_NOTIFICATION_ID = "AutoQuestComplete-update";
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
+const MIN_BETTERDISCORD_VERSION = "1.14.5";
 
 class AutoQuestComplete {
     constructor(meta) {
@@ -182,7 +206,30 @@ class AutoQuestComplete {
         }
     }
 
+    isBetterDiscordSupported() {
+        const current = BdApi.version;
+        if (!SEMVER_PATTERN.test(current ?? "")) return true;
+        return Utils.semverCompare(MIN_BETTERDISCORD_VERSION, current) >= 0;
+    }
+
+    isQuestOpen(quest) {
+        return !quest.userStatus?.completedAt && new Date(quest.config?.expiresAt).getTime() > Date.now();
+    }
+
+    findEnrolledQuest() {
+        return this.getQuests().find(x =>
+            !this._unsupportedQuests.has(x.id) &&
+            x.userStatus?.enrolledAt &&
+            this.isQuestOpen(x)
+        );
+    }
+
     start() {
+        if (!this.isBetterDiscordSupported()) {
+            Logger.error(this._config.info.name, `BetterDiscord ${MIN_BETTERDISCORD_VERSION} or newer is required.`);
+            UI.showToast(`AutoQuestComplete requires BetterDiscord ${MIN_BETTERDISCORD_VERSION} or newer.`, { type: "error" });
+            return;
+        }
         this._abortController = new AbortController();
         this.showChangelogOnce();
         this.checkForUpdate();
@@ -198,20 +245,14 @@ class AutoQuestComplete {
             this._questsStore.addChangeListener(this._boundHandleQuestChange);
             this._questsStore.addChangeListener(this._boundNewQuestHandler);
 
-            const quest = this.getQuests().find(x =>
-                !this._unsupportedQuests.has(x.id) &&
-                x.userStatus?.enrolledAt &&
-                !x.userStatus?.completedAt &&
-                new Date(x.config.expiresAt).getTime() > Date.now()
-            );
-
+            const quest = this.findEnrolledQuest();
             if (quest) {
                 this.activateQuest(quest);
                 this.runQuest(quest);
             }
-        } catch (e) {
-            Logger.error(this._config.info.name, "Error while starting AutoQuestComplete", e);
-            UI.showToast("Error while starting AutoQuestComplete", {type:"error"});
+        } catch (err) {
+            Logger.error(this._config.info.name, "Error while starting AutoQuestComplete", err);
+            UI.showToast("Error while starting AutoQuestComplete", { type: "error" });
         }
     }
 
@@ -281,7 +322,7 @@ class AutoQuestComplete {
                 Logger.error(this._config.info.name, "Cleanup failed", err);
             }
         };
-        this._cleanups.add(run);
+        scope.add(run);
         return run;
     }
 
@@ -361,7 +402,8 @@ class AutoQuestComplete {
         const now = Date.now();
         this._storedUnsupportedQuests = {};
         for (const [questId, expiresAt] of Object.entries(stored)) {
-            if (typeof expiresAt !== "number" ||             expiresAt <= now) continue;            this._storedUnsupportedQuests[questId] = expiresAt;
+            if (typeof expiresAt !== "number" || expiresAt <= now) continue;
+            this._storedUnsupportedQuests[questId] = expiresAt;
             this._unsupportedQuests.add(questId);
         }
 
@@ -370,8 +412,8 @@ class AutoQuestComplete {
 
     markQuestUnsupported(quest) {
         this._unsupportedQuests.add(quest.id);
-        const expires_at = new Date(quest?.config?.expiresAt).getTime();
-        this._storedUnsupportedQuests[quest.id] = Number.isFinite(expires_at) ? expires_at : Date.now() + UNSUPPORTED_FALLBACK_TTL_MS;
+        const expiresAt = new Date(quest?.config?.expiresAt).getTime();
+        this._storedUnsupportedQuests[quest.id] = Number.isFinite(expiresAt) ? expiresAt : Date.now() + UNSUPPORTED_FALLBACK_TTL_MS;
         this.saveUnsupportedQuests();
     }
 
@@ -424,7 +466,9 @@ class AutoQuestComplete {
     getRewardText(quest) {
         const parts = this.getQuestRewards(quest).map(reward => {
             if (typeof reward?.orbQuantity === "number" && reward.orbQuantity > 0) {
-                return reward.premiumOrbQuantity &&                 reward.premiumOrbQuantity !== reward.orbQuantity                ? `${reward.orbQuantity} Orbs (${reward.premiumOrbQuantity} with Nitro)` : `${reward.orbQuantity} Orbs`;
+                return reward.premiumOrbQuantity && reward.premiumOrbQuantity !== reward.orbQuantity
+                    ? `${reward.orbQuantity} Orbs (${reward.premiumOrbQuantity} with Nitro)`
+                    : `${reward.orbQuantity} Orbs`;
             }
             return reward?.messages?.name;
         }).filter(Boolean);
@@ -601,8 +645,7 @@ class AutoQuestComplete {
 
     isQuestNotifiable(quest) {
         return !quest.userStatus?.enrolledAt &&
-            !quest.userStatus?.completedAt &&
-            new Date(quest.config?.expiresAt).getTime() > Date.now() &&
+            this.isQuestOpen(quest) &&
             this.shouldNotifyForQuest(quest) &&
             (this.settings.notifyUnsupported || this.isQuestSupported(quest));
     }
@@ -646,50 +689,46 @@ class AutoQuestComplete {
     }
 
     focusQuestContainer(quest) {
-        const quest_title_id = `quest-tile-${quest.id}`;
+        const tileId = `quest-tile-${quest.id}`;
         let attempts = 0;
 
-        const highlight_container = () => {
-            const quest_container = document.getElementById(quest_title_id);
+        const highlightTile = () => {
+            const tile = document.getElementById(tileId);
 
-            if (!quest_container) {
+            if (!tile) {
                 if (attempts++ < FOCUS_MAX_ATTEMPTS) {
-                    this.setTimer(highlight_container, FOCUS_POLL_MS);
+                    this.setTimer(highlightTile, FOCUS_POLL_MS);
                 } else {
-                    Logger.warn(this._config.info.name, `Gave up waiting for ${quest_title_id} to render.`);
+                    Logger.warn(this._config.info.name, `Gave up waiting for ${tileId} to render.`);
                 }
                 return;
             }
 
-            quest_container.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-            const originalTabindex = quest_container.getAttribute("tabindex");
-            quest_container.setAttribute("tabindex", "-1");
-            quest_container.focus({ preventScroll: true });
+            tile.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+            const originalTabindex = tile.getAttribute("tabindex");
+            tile.setAttribute("tabindex", "-1");
+            tile.focus({ preventScroll: true });
 
-            const originalOutline = quest_container.style.outline;
-            const originalOutlineOffset = quest_container.style.outlineOffset;
-            const originalBoxShadow = quest_container.style.boxShadow;
-            const originalTransition = quest_container.style.transition;
+            const { outline, outlineOffset, boxShadow, transition } = tile.style;
 
             const restoreStyles = this.addCleanup(() => {
-                if (!quest_container.isConnected) return;
-                if (originalTabindex === null) quest_container.removeAttribute("tabindex");
-                else quest_container.setAttribute("tabindex", originalTabindex);
-                quest_container.style.outline = originalOutline;
-                quest_container.style.outlineOffset = originalOutlineOffset;
-                quest_container.style.boxShadow = originalBoxShadow;
-                quest_container.style.transition = originalTransition;
+                if (!tile.isConnected) return;
+                if (originalTabindex === null) tile.removeAttribute("tabindex");
+                else tile.setAttribute("tabindex", originalTabindex);
+                Object.assign(tile.style, { outline, outlineOffset, boxShadow, transition });
             });
 
-            quest_container.style.transition = "box-shadow 180ms ease, outline 180ms ease";
-            quest_container.style.outline = `3px solid ${HIGHLIGHT_COLOR}`;
-            quest_container.style.outlineOffset = "6px";
-            quest_container.style.boxShadow = `0 0 0 8px ${HIGHLIGHT_GLOW_COLOR}`;
+            Object.assign(tile.style, {
+                transition: "box-shadow 180ms ease, outline 180ms ease",
+                outline: `3px solid ${HIGHLIGHT_COLOR}`,
+                outlineOffset: "6px",
+                boxShadow: `0 0 0 8px ${HIGHLIGHT_GLOW_COLOR}`
+            });
 
             this.setTimer(restoreStyles, HIGHLIGHT_DURATION_MS);
         };
 
-        this.setTimer(highlight_container, FOCUS_POLL_MS);
+        this.setTimer(highlightTile, FOCUS_POLL_MS);
     }
 
     pluralize(count, noun) {
@@ -787,16 +826,11 @@ class AutoQuestComplete {
     }
 
     handleQuestChange() {
-        const quest = this.getQuests().find(x =>
-            !this._unsupportedQuests.has(x.id) &&
-            x.userStatus?.enrolledAt &&
-            !x.userStatus?.completedAt &&
-            new Date(x.config.expiresAt).getTime() > Date.now()
-        );
+        const quest = this.findEnrolledQuest();
 
         if (quest && quest.id !== this._activeQuestId) {
             this.activateQuest(quest);
-            UI.showToast(`New quest found: ${this._activeQuestName}`, {type:"info"});
+            UI.showToast(`New quest found: ${this._activeQuestName}`, { type: "info" });
             this.runQuest(quest);
         }
     }
@@ -1015,7 +1049,7 @@ class AutoQuestComplete {
                 await new Promise(resolve => {
                     const started = Date.now();
                     const check = () => {
-                        if (!document.querySelector('[role="dialog"]') ||                         Date.now() - started > DIALOG_CLOSE_TIMEOUT_MS) return resolve();
+                        if (!document.querySelector('[role="dialog"]') || Date.now() - started > DIALOG_CLOSE_TIMEOUT_MS) return resolve();
                                                 this.setTimer(check, DIALOG_POLL_MS);
                     };
                     check();
