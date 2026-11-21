@@ -128,6 +128,21 @@ const REWARD_SETTING_PREFIX = "reward_";
 const FAKE_PID_MIN = 1000;
 const FAKE_PID_RANGE = 30000;
 const QUESTS_PATH = "/quest-home";
+const MS_PER_SECOND = 1000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const MINUTES_PER_DAY = 24 * 60;
+const UNSUPPORTED_FALLBACK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const WATCH_VIDEO_STEP_SECONDS = 7;
+const FOCUS_POLL_MS = 250;
+const FOCUS_MAX_ATTEMPTS = 40;
+const HIGHLIGHT_DURATION_MS = 5000;
+const HIGHLIGHT_COLOR = "rgba(88, 101, 242, 0.95)";
+const HIGHLIGHT_GLOW_COLOR = "rgba(88, 101, 242, 0.2)";
+const SKIP_NEXT_QUEST_DELAY_MS = 1000;
+const UNSUPPORTED_NEXT_QUEST_DELAY_MS = 5000;
+const DIALOG_POLL_MS = 100;
+const DIALOG_CLOSE_TIMEOUT_MS = 3000;
 const PROGRESS_TOAST_INTERVAL_MS = 60000;
 const MAX_REPORT_STACK_LENGTH = 1500;
 const UPDATE_TIMEOUT_MS = 15000;
@@ -376,7 +391,7 @@ class AutoQuestComplete {
     markQuestUnsupported(quest) {
         this._unsupportedQuests.add(quest.id);
         const expires_at = new Date(quest?.config?.expiresAt).getTime();
-        this._storedUnsupportedQuests[quest.id] = Number.isFinite(expires_at) ? expires_at : Date.now() + 7 * 24 * 60 * 60 * 1000;
+        this._storedUnsupportedQuests[quest.id] = Number.isFinite(expires_at) ? expires_at : Date.now() + UNSUPPORTED_FALLBACK_TTL_MS;
         this.saveUnsupportedQuests();
     }
 
@@ -456,18 +471,18 @@ class AutoQuestComplete {
         if (!taskName) return null;
         const seconds = tasks[taskName]?.target ?? 0;
         if (!seconds) return labels[taskName];
-        const duration = seconds >= 60 ? `${Math.round(seconds / 60)} min` : `${seconds} sec`;
+        const duration = seconds >= SECONDS_PER_MINUTE ? `${Math.round(seconds / SECONDS_PER_MINUTE)} min` : `${seconds} sec`;
         return `${labels[taskName]} (~${duration})`;
     }
 
     formatRelativeTime(dateStr) {
         const ms = new Date(dateStr).getTime() - Date.now();
         if (!Number.isFinite(ms) || ms <= 0) return null;
-        const minutes = Math.floor(ms / 60000);
-        const days = Math.floor(minutes / 1440);
-        const hours = Math.floor((minutes % 1440) / 60);
+        const minutes = Math.floor(ms / (SECONDS_PER_MINUTE * MS_PER_SECOND));
+        const days = Math.floor(minutes / MINUTES_PER_DAY);
+        const hours = Math.floor((minutes % MINUTES_PER_DAY) / MINUTES_PER_HOUR);
         if (days > 0) return `${days}d ${hours}h`;
-        if (hours > 0) return `${hours}h ${minutes % 60}m`;
+        if (hours > 0) return `${hours}h ${minutes % MINUTES_PER_HOUR}m`;
         return `${minutes}m`;
     }
 
@@ -542,7 +557,7 @@ class AutoQuestComplete {
     getBackoffDelay(err, attempt) {
         const retryAfterSeconds = Number(err?.body?.retry_after);
         const delay = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
-            ? retryAfterSeconds * 1000
+            ? retryAfterSeconds * MS_PER_SECOND
             : API_BASE_BACKOFF_MS * 2 ** attempt;
         return Math.min(delay, API_MAX_BACKOFF_MS);
     }
@@ -672,8 +687,8 @@ class AutoQuestComplete {
             const quest_container = document.getElementById(quest_title_id);
 
             if (!quest_container) {
-                if (attempts++ < 40) {
-                    this.setTimer(highlight_container, 250);
+                if (attempts++ < FOCUS_MAX_ATTEMPTS) {
+                    this.setTimer(highlight_container, FOCUS_POLL_MS);
                 } else {
                     Logger.warn(this._config.info.name, `Gave up waiting for ${quest_title_id} to render.`);
                 }
@@ -701,14 +716,14 @@ class AutoQuestComplete {
             });
 
             quest_container.style.transition = "box-shadow 180ms ease, outline 180ms ease";
-            quest_container.style.outline = "3px solid rgba(88, 101, 242, 0.95)";
+            quest_container.style.outline = `3px solid ${HIGHLIGHT_COLOR}`;
             quest_container.style.outlineOffset = "6px";
-            quest_container.style.boxShadow = "0 0 0 8px rgba(88, 101, 242, 0.2)";
+            quest_container.style.boxShadow = `0 0 0 8px ${HIGHLIGHT_GLOW_COLOR}`;
 
-            this.setTimer(restoreStyles, 5000);
+            this.setTimer(restoreStyles, HIGHLIGHT_DURATION_MS);
         };
 
-        this.setTimer(highlight_container, 250);
+        this.setTimer(highlight_container, FOCUS_POLL_MS);
     }
 
 
@@ -893,18 +908,18 @@ class AutoQuestComplete {
         this.markQuestUnsupported(quest);
         Logger.info(this._config.info.name, `${this._activeQuestName} is not supported by this plugin. "Xbox and Playstation" Task.`);
         UI.showToast(`Skipping ${this._activeQuestName}.`, { type: "warning" });
-        this.setTimer(() => this.handleQuestChange(), 1000);
+        this.setTimer(() => this.handleQuestChange(), SKIP_NEXT_QUEST_DELAY_MS);
     }
 
     runWatchVideo({ quest, secondsNeeded, secondsDone, signal, lifecycleSignal, dependencies }) {
         const { api } = dependencies;
-        const speed = 7;
+        const speed = WATCH_VIDEO_STEP_SECONDS;
         let isFinished = false;
         let reachedEnd = false;
         (async () => {
             while (!signal.aborted) {
                 const remain = Math.min(speed, secondsNeeded - secondsDone);
-                await this.sleep(remain * 1000, signal);
+                await this.sleep(remain * MS_PER_SECOND, signal);
                 if (signal.aborted) return;
                 const timestamp = secondsDone + speed;
 
@@ -966,8 +981,9 @@ class AutoQuestComplete {
             }, this._runCleanups);
 
             FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
-            Logger.info(this._config.info.name, `Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min.`);
-            UI.showToast(`Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min.`, { type: "info" });
+            const minutesLeft = Math.ceil((secondsNeeded - secondsDone) / SECONDS_PER_MINUTE);
+            Logger.info(this._config.info.name, `Spoofed game to ${this._activeQuestName}. Wait ~${minutesLeft} min.`);
+            UI.showToast(`Spoofed game to ${this._activeQuestName}. Wait ~${minutesLeft} min.`, { type: "info" });
         }).catch(err => this.reportAsyncError(err, signal));
     }
 
@@ -986,8 +1002,9 @@ class AutoQuestComplete {
             FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
         }, this._runCleanups);
         FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
-        Logger.info(this._config.info.name, `Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min. (Need at least one VC peer)`);
-        UI.showToast(`Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min. (Need at least one VC peer)`, { type: "info" });
+        const minutesLeft = Math.ceil((secondsNeeded - secondsDone) / SECONDS_PER_MINUTE);
+        Logger.info(this._config.info.name, `Spoofed stream to ${this._activeQuestName}. Stream ~${minutesLeft} min. (Need at least one VC peer)`);
+        UI.showToast(`Spoofed stream to ${this._activeQuestName}. Stream ~${minutesLeft} min. (Need at least one VC peer)`, { type: "info" });
     }
 
     runPlayActivity({ quest, secondsNeeded, secondsDone, signal, lifecycleSignal, dependencies }) {
@@ -1003,7 +1020,7 @@ class AutoQuestComplete {
             Logger.info(this._config.info.name, "Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
             UI.showToast(`Completing quest ${this._activeQuestName} - ${quest.config.messages.questName}`, { type: "info" });
             let reachedEnd = false;
-            const maxHeartbeats = Math.ceil(Math.max(secondsNeeded - secondsDone, 0) / (HEARTBEAT_INTERVAL_MS / 1000)) + HEARTBEAT_EXTRA_ATTEMPTS;
+            const maxHeartbeats = Math.ceil(Math.max(secondsNeeded - secondsDone, 0) / (HEARTBEAT_INTERVAL_MS / MS_PER_SECOND)) + HEARTBEAT_EXTRA_ATTEMPTS;
             for (let heartbeat = 0; heartbeat < maxHeartbeats && !signal.aborted; heartbeat++) {
                 const res = await this.request(api, "post", { url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: false } }, signal);
                 if (signal.aborted) return;
@@ -1034,8 +1051,8 @@ class AutoQuestComplete {
                 await new Promise(resolve => {
                     const started = Date.now();
                     const check = () => {
-                        if (!document.querySelector('[role="dialog"]') || Date.now() - started > 3000) return resolve();
-                        this.setTimer(check, 100);
+                        if (!document.querySelector('[role="dialog"]') ||                         Date.now() - started > DIALOG_CLOSE_TIMEOUT_MS) return resolve();
+                                                this.setTimer(check, DIALOG_POLL_MS);
                     };
                     check();
                 });
@@ -1043,7 +1060,7 @@ class AutoQuestComplete {
                 this.focusQuestContainer(quest);
             }
         });
-        this.setTimer(() => this.handleQuestChange(), 5000);
+        this.setTimer(() => this.handleQuestChange(), UNSUPPORTED_NEXT_QUEST_DELAY_MS);
     }
 
     getErrorMessage(err) {
