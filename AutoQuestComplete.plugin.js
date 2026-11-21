@@ -127,6 +127,7 @@ const MAX_LISTED_QUESTS = 5;
 const REWARD_SETTING_PREFIX = "reward_";
 const FAKE_PID_MIN = 1000;
 const FAKE_PID_RANGE = 30000;
+const QUESTS_PATH = "/quest-home";
 const PROGRESS_TOAST_INTERVAL_MS = 60000;
 const MAX_REPORT_STACK_LENGTH = 1500;
 const UPDATE_TIMEOUT_MS = 15000;
@@ -635,25 +636,28 @@ class AutoQuestComplete {
     }
 
 
-    async openQuests() {
+    getRouter() {
+        this._router ??= Webpack.getModule(m => m?.transitionTo && m?.replaceWith && m?.getHistory, { searchExports: true });
+        return this._router;
+    }
+
+    openQuests() {
         try {
-            const quest_link = document.querySelector('a[href="/quest-home"]');
+            if (location.pathname.startsWith(QUESTS_PATH)) return;
 
-            if (quest_link) {
-                quest_link.click();
-                await new Promise(r => setTimeout(r, 300));
-                if (location.pathname.startsWith("/quest")) return;
-            }
-
-            this._router ??= Webpack.getModule(m => m?.transitionTo && m?.replaceWith && m?.getHistory, { searchExports: true });
-            if (this._router?.transitionTo) {
-                this._router.transitionTo("/quest-home");
+            const router = this.getRouter();
+            if (router?.transitionTo) {
+                router.transitionTo(QUESTS_PATH);
                 return;
             }
 
-            window.history.pushState({}, "", "/quest-home");
-            window.dispatchEvent(new PopStateEvent("popstate"));
-
+            const questLink = document.querySelector(`a[href="${QUESTS_PATH}"]`);
+            if (questLink) {
+                questLink.click();
+                return;
+            }
+            Logger.warn(this._config.info.name, "No way found to open the quests page.");
+            UI.showToast("Could not open the quests page.", { type: "error" });
         } catch (err) {
             Logger.error(this._config.info.name, "Failed to open quests page", err);
         }
@@ -677,6 +681,7 @@ class AutoQuestComplete {
             }
 
             quest_container.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+            const originalTabindex = quest_container.getAttribute("tabindex");
             quest_container.setAttribute("tabindex", "-1");
             quest_container.focus({ preventScroll: true });
 
@@ -687,6 +692,8 @@ class AutoQuestComplete {
 
             const restoreStyles = this.addCleanup(() => {
                 if (!quest_container.isConnected) return;
+                if (originalTabindex === null) quest_container.removeAttribute("tabindex");
+                else quest_container.setAttribute("tabindex", originalTabindex);
                 quest_container.style.outline = originalOutline;
                 quest_container.style.outlineOffset = originalOutlineOffset;
                 quest_container.style.boxShadow = originalBoxShadow;
@@ -750,8 +757,8 @@ class AutoQuestComplete {
         return [
             {
                 label: "Go to Quests",
-                onClick: async () => {
-                    await this.openQuests();
+                onClick: () => {
+                    this.openQuests();
                     if (quests.length === 1) this.focusQuestContainer(quests[0]);
                 }
             },
@@ -1032,7 +1039,7 @@ class AutoQuestComplete {
                     };
                     check();
                 });
-                await this.openQuests();
+                this.openQuests();
                 this.focusQuestContainer(quest);
             }
         });
