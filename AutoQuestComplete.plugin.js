@@ -135,6 +135,9 @@ const NOTIFY_DEBOUNCE_MS = 750;
 const NOTIFY_RETRY_MS = 300;
 const NOTIFY_MAX_RETRIES = 3;
 const MAX_LISTED_QUESTS = 5;
+const UPDATE_TIMEOUT_MS = 15000;
+const UPDATE_NOTIFICATION_ID = "AutoQuestComplete-update";
+const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
 
 class AutoQuestComplete {
     constructor() {
@@ -981,73 +984,76 @@ class AutoQuestComplete {
         }
     }
 
-    async checkForUpdate() {
-        try {
-            let fileContent = await (await fetch(this._config.info.github_raw, { headers: { "User-Agent": "BetterDiscord" } })).text();
-            let remoteMeta = this.parseMeta(fileContent);
-            if (Utils.semverCompare(this._config.info.version, remoteMeta.version) > 0) {
-                this.newUpdateNotify(remoteMeta, fileContent);
-            }
-        }
-        catch (err) {
-            Logger.error(this._config.info.name, err);
-        }
+    async fetchRemotePlugin() {
+        const signal = AbortSignal.any([this._abortController.signal, AbortSignal.timeout(UPDATE_TIMEOUT_MS)]);
+        const response = await fetch(this._config.info.github_raw, { signal });
+        if (!response.ok) throw new Error(`Update server responded with ${response.status}`);
+        const fileContent = await response.text();
+        return { fileContent, remoteMeta: this.parseMeta(fileContent) };
+    }
 
+    // The remote file must be this plugin and a newer, valid semver version before it is offered.
+    isValidUpdate(remoteMeta) {
+        return remoteMeta.name === this._config.info.name &&
+            SEMVER_PATTERN.test(remoteMeta.version ?? "") &&
+            Utils.semverCompare(this._config.info.version, remoteMeta.version) > 0;
+    }
+
+    async checkForUpdate() {
+        if (!this._abortController) return;
+        try {
+            const { fileContent, remoteMeta } = await this.fetchRemotePlugin();
+            if (this.isValidUpdate(remoteMeta)) this.newUpdateNotify(remoteMeta, fileContent);
+        } catch (err) {
+            if (!this._abortController || err?.name === "AbortError") return;
+            Logger.error(this._config.info.name, "Update check failed", err);
+        }
+    }
+
+    async installUpdate(remoteFile) {
+        const { name } = this._config.info;
+        const target = require("path").join(BdApi.Plugins.folder, `${name}.plugin.js`);
+        try {
+            await require("fs").promises.writeFile(target, remoteFile);
+        } catch (err) {
+            UI.showToast("An error occurred when trying to download the update!", { type: "error" });
+            Logger.error(name, "Could not write the update file", err);
+            return;
+        }
+        try {
+            const versionInfo = Data.load(name, "currentVersionInfo") ?? {};
+            Data.save(name, "currentVersionInfo", { ...versionInfo, hasShownChangelog: false });
+        } catch (err) {
+            Logger.error(name, "Could not reset the changelog flag", err);
+        }
     }
 
     newUpdateNotify(remoteMeta, remoteFile) {
         Logger.info(this._config.info.name, "A new update is available!");
 
-        // UI.showConfirmationModal("Update Available", [`Update ${remoteMeta.version} is now available for AutoQuestComplete!`, "Press Download Now to update!"], {
-        //     confirmText: "Download Now",
-        //     onConfirm: async (e) => {
-        //         if (remoteFile) {
-        //             await new Promise(r => require("fs").writeFile(require("path").join(BdApi.Plugins.folder, `${this._config.info.name}.plugin.js`), remoteFile, r));
-        //             try {
-        //                 let currentVersionInfo = Data.load(this._config.info.name, "currentVersionInfo");
-        //                 currentVersionInfo.hasShownChangelog = false;
-        //                 Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
-        //             } catch (err) {
-        //                 UI.showToast("An error occurred when trying to download the update!", { type: "error" });
-        //             }
-        //         }
-        //     }
-        // });
         UI.showNotification({
             title: `${this._config.info.name} Update Available!`,
             content: `Version ${remoteMeta.version} is now available!`,
+            id: UPDATE_NOTIFICATION_ID,
             type: "info",
-            duration: 1/0,
+            duration: Infinity,
             actions: [
                 {
                     label: "Update Now",
-                    onClick: async (e) => {
-                        if (remoteFile) {
-                            await new Promise(r => require("fs").writeFile(require("path").join(BdApi.Plugins.folder, `${this._config.info.name}.plugin.js`), remoteFile, r));
-                            try {
-                                let currentVersionInfo = Data.load(this._config.info.name, "currentVersionInfo");
-                                currentVersionInfo.hasShownChangelog = false;
-                                Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
-                            } catch (err) {
-                                UI.showToast("An error occurred when trying to download the update!", { type: "error" });
-                                Logger.error(this._config.info.name, "An error occurred when trying to download the update!", err);
-                            }
-                        }
-                    }
+                    onClick: () => this.installUpdate(remoteFile)
                 },
                 {
                     label: "Update Later",
                     onClick: () => { }
                 }
             ]
-        })
+        });
     }
 
     parseMeta(fileContent) {
         const meta = {};
-        const regex = /@([a-zA-Z]+)\s+(.+)/g;
-        let match;
-        while ((match = regex.exec(fileContent)) !== null) {
+        const header = fileContent.match(/^\s*\/\*\*[\s\S]*?\*\//)?.[0] ?? "";
+        for (const match of header.matchAll(/@([a-zA-Z]+)[ \t]+(.+)/g)) {
             meta[match[1]] = match[2].trim();
         }
         return meta;
