@@ -576,7 +576,8 @@ class AutoQuestComplete {
     resolveDependencies() {
         return {
             api: Webpack.getByKeys("get", "post", "put", "patch", "del", { searchExports: true }),
-            FluxDispatcher: Webpack.getByKeys("dispatch", "subscribe", "register", { searchExports: true }),
+            FluxDispatcher: Webpack.getByKeys("dispatch", "subscribe", "register")
+                ?? Webpack.getByKeys("dispatch", "subscribe", "register", { searchExports: true }),
             ApplicationStreamingStore: Webpack.Stores.ApplicationStreamingStore,
             RunningGameStore: Webpack.Stores.RunningGameStore
         };
