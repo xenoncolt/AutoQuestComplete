@@ -24,7 +24,8 @@ const config = {
                 "New quests are now announced in **one combined notification** (\"3 new quests available\") with the real count, a short list and the number of quests that must be completed manually",
                 "Requires **BetterDiscord 1.14.5** or newer",
                 "Quest progress toasts are limited to one per minute",
-                "The plugin checks the GitHub repository for a newer version on load and once a day, and lets you choose **Update Now** or **Update Later**",
+                "The plugin checks the GitHub repository for a newer version on load and once a day, and lets you choose **Update Now** or **Update Later**; a toast confirms the installed update",
+                "The update source is read from the plugin's `@source` header",
                 "Thanks for the help griffinsectio and Thanks for creating issue TouhouJevil"
             ]
         },
@@ -47,7 +48,10 @@ const config = {
             type: "improved",
             items: [
                 "Quest handling is split into one handler per task type",
-                "Constants replace magic numbers, dead code was removed and ESLint reports no problems"
+                "Constants replace magic numbers, dead code was removed and ESLint reports no problems",
+                "Logging, data storage and patching use a plugin-scoped BetterDiscord API instance",
+                "Task labels and handlers are module constants, and unit tests cover the core helpers",
+                "The README documents the minimum BetterDiscord version, self-updates and the risk of automating quests"
             ]
         }
     ],
