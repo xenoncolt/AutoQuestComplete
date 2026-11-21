@@ -44,6 +44,7 @@ const config = {
                 "The error report no longer includes local user paths",
                 "If Discord's functions cannot be patched, the quest stops with an error message instead of silently running without spoofing",
                 "Critical startup errors are shown even when toasts are disabled in BetterDiscord",
+                "Log and toast messages for skipped and activity quests are accurate and no longer repeat the quest name",
             ]
         },
         {
@@ -53,7 +54,7 @@ const config = {
                 "Quest handling is split into one handler per task type",
                 "Constants replace magic numbers, dead code was removed and ESLint reports no problems",
                 "Logging, data storage and patching use a plugin-scoped BetterDiscord API instance",
-                "Task labels and handlers are module constants, and unit tests cover the core helpers",
+                "Task labels and handlers are module constants, the quest task lookup is derived from the handler map, and unit tests cover the core helpers",
                 "Discord modules are looked up with the faster default-export search first, with the previous search as fallback",
                 "The README documents the minimum BetterDiscord version, self-updates and the risk of automating quests"
             ]
