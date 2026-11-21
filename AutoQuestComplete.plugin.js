@@ -117,7 +117,7 @@ const config = {
     ]
 }
 
-const { Webpack, UI, Logger, Data, Utils, React } = BdApi;
+const { Webpack, UI, Logger, Data, Utils, React, Patcher } = BdApi;
 
 
 const SUPPORTED_TASKS = ["WATCH_VIDEO", "WATCH_VIDEO_ON_MOBILE", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY"];
@@ -217,6 +217,7 @@ class AutoQuestComplete {
         }
         this._timers.clear();
         this.runCleanups();
+        Patcher.unpatchAll(this._config.info.name);
         this._activeQuestId = null;
         this._activeQuestName = null;
         this._activeAppId = null;
@@ -712,15 +713,13 @@ class AutoQuestComplete {
                     };
                     const realGames = RunningGameStore.getRunningGames();
                     const fakeGames = [fakeGame];
-                    const realGetRunningGames = RunningGameStore.getRunningGames;
-                    const realGetGameForPID = RunningGameStore.getGameForPID;
-                    RunningGameStore.getRunningGames = () => fakeGames;
-                    RunningGameStore.getGameForPID = (pid) => fakeGames.find(x => x.pid === pid);
+                    const unpatchGames = Patcher.instead(this._config.info.name, RunningGameStore, "getRunningGames", () => fakeGames);
+                    const unpatchGameForPid = Patcher.instead(this._config.info.name, RunningGameStore, "getGameForPID", (_, [gamePid]) => fakeGames.find(x => x.pid === gamePid));
                     FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames });
 
                     const stopSpoofing = this.addCleanup(() => {
-                        RunningGameStore.getRunningGames = realGetRunningGames;
-                        RunningGameStore.getGameForPID = realGetGameForPID;
+                        unpatchGames?.();
+                        unpatchGameForPid?.();
                         FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
                         FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
                     });
@@ -741,14 +740,13 @@ class AutoQuestComplete {
                 });
             }
             else if (taskName === "STREAM_ON_DESKTOP") {
-                const realStreamerFunc = ApplicationStreamingStore.getStreamerActiveStreamMetadata;
-                ApplicationStreamingStore.getStreamerActiveStreamMetadata = () => ({
+                const unpatchStream = Patcher.instead(this._config.info.name, ApplicationStreamingStore, "getStreamerActiveStreamMetadata", () => ({
                     id: this._activeQuestId,
                     pid,
                     sourceName: null
-                });
+                }));
                 const stopSpoofing = this.addCleanup(() => {
-                    ApplicationStreamingStore.getStreamerActiveStreamMetadata = realStreamerFunc;
+                    unpatchStream?.();
                     FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
                 });
                 let fn = data => {
