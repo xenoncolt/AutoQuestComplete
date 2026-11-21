@@ -121,6 +121,13 @@ const { Webpack, UI, Logger, Data, Utils, React, Patcher } = BdApi;
 
 
 const SUPPORTED_TASKS = ["WATCH_VIDEO", "WATCH_VIDEO_ON_MOBILE", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY"];
+const API_MAX_RETRIES = 3;
+const API_BASE_BACKOFF_MS = 2000;
+const API_MAX_BACKOFF_MS = 30000;
+const HEARTBEAT_INTERVAL_MS = 20000;
+const HEARTBEAT_EXTRA_ATTEMPTS = 10;
+const HTTP_TOO_MANY_REQUESTS = 429;
+const HTTP_SERVER_ERROR = 500;
 
 class AutoQuestComplete {
     constructor() {
@@ -486,6 +493,40 @@ class AutoQuestComplete {
         };
     }
 
+    isRetryableError(err) {
+        const status = err?.status;
+        return status === undefined || status === HTTP_TOO_MANY_REQUESTS || status >= HTTP_SERVER_ERROR;
+    }
+
+    getBackoffDelay(err, attempt) {
+        const retryAfterSeconds = Number(err?.body?.retry_after);
+        const delay = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+            ? retryAfterSeconds * 1000
+            : API_BASE_BACKOFF_MS * 2 ** attempt;
+        return Math.min(delay, API_MAX_BACKOFF_MS);
+    }
+
+    // Retries rate limits, server errors and network failures with backoff; other errors are thrown immediately.
+    async request(api, method, options, signal) {
+        for (let attempt = 0; ; attempt++) {
+            try {
+                return await api[method](options);
+            } catch (err) {
+                if (signal.aborted || attempt >= API_MAX_RETRIES || !this.isRetryableError(err)) throw err;
+                Logger.warn(this._config.info.name, `Request ${method.toUpperCase()} ${options.url} failed (${err?.status ?? "network"}), retrying.`);
+                await this.sleep(this.getBackoffDelay(err, attempt), signal);
+                if (signal.aborted) throw err;
+            }
+        }
+    }
+
+    reportAsyncError(err, signal) {
+        if (signal.aborted) return;
+        const reason = err?.body?.message ?? err?.message ?? "Unknown error";
+        Logger.error(this._config.info.name, `Quest "${this._activeQuestName}" failed`, err);
+        UI.showToast(`Quest "${this._activeQuestName}" failed: ${reason}`, { type: "error" });
+    }
+
     hasDependencies(dependencies, names) {
         const missing = names.filter(name => !dependencies[name]);
         if (!missing.length) return true;
@@ -706,11 +747,9 @@ class AutoQuestComplete {
                         if (signal.aborted) return;
                         const timestamp = secondsDone + speed;
 
-
-                            const response = await api.post({ url: `/quests/${quest.id}/video-progress`, body: { timestamp: Math.min(secondsNeeded, timestamp + Math.random()) } });
-                            isFinished = response.body.completed_at != null;
-                            secondsDone = Math.min(secondsNeeded, timestamp);
-
+                        const response = await this.request(api, "post", { url: `/quests/${quest.id}/video-progress`, body: { timestamp: Math.min(secondsNeeded, timestamp + Math.random()) } }, signal);
+                        isFinished = response?.body?.completed_at != null;
+                        secondsDone = Math.min(secondsNeeded, timestamp);
 
                         if (timestamp >= secondsNeeded) {
                             reachedEnd = true;
@@ -719,11 +758,11 @@ class AutoQuestComplete {
                     }
                     if (!reachedEnd || lifecycleSignal.aborted) return;
                     if (!isFinished) {
-                        await api.post({ url: `/quests/${quest.id}/video-progress`, body: { timestamp: secondsNeeded } });
+                        await this.request(api, "post", { url: `/quests/${quest.id}/video-progress`, body: { timestamp: secondsNeeded } }, lifecycleSignal);
                     }
                     Logger.info(this._config.info.name, "Quest completed!");
                     UI.showToast("Quest completed!", { type: "success" });
-                })();
+                })().catch(err => this.reportAsyncError(err, signal));
 
                 Logger.info(this._config.info.name, `Spoofing video for ${this._activeQuestName}.`);
                 UI.showToast(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / speed)} sec.`, { type: "info" });
@@ -735,7 +774,7 @@ class AutoQuestComplete {
                     return;
                 }
                 if (!this.hasDependencies(dependencies, ["FluxDispatcher", "RunningGameStore"])) return;
-                api.get({ url: `/applications/public?application_ids=${this._activeQuestId}` }).then(res => {
+                this.request(api, "get", { url: `/applications/public?application_ids=${this._activeQuestId}` }, signal).then(res => {
                     if (signal.aborted) return;
                     const appData = res.body[0];
                     const exeName = appData.executables?.find(x => x.os === "win32")?.name?.replace(">", "") ?? appData.name.replace(/[\/\\:*?"<>|]/g, "");
@@ -778,7 +817,7 @@ class AutoQuestComplete {
                     FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
                     Logger.info(this._config.info.name, `Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min.`);
                     UI.showToast(`Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min.`, { type: "info" });
-                });
+                }).catch(err => this.reportAsyncError(err, signal));
             }
             else if (taskName === "STREAM_ON_DESKTOP") {
                 if (!this.hasDependencies(dependencies, ["FluxDispatcher", "ApplicationStreamingStore"])) return;
@@ -813,24 +852,27 @@ class AutoQuestComplete {
                     Logger.info(this._config.info.name, "Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
                     UI.showToast(`Completing quest ${this._activeQuestName} - ${quest.config.messages.questName}`, { type: "info" });
                     let reachedEnd = false;
-                    while (!signal.aborted) {
-                        const res = await api.post({ url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: false } });
+                    const maxHeartbeats = Math.ceil(Math.max(secondsNeeded - secondsDone, 0) / (HEARTBEAT_INTERVAL_MS / 1000)) + HEARTBEAT_EXTRA_ATTEMPTS;
+                    for (let heartbeat = 0; heartbeat < maxHeartbeats && !signal.aborted; heartbeat++) {
+                        const res = await this.request(api, "post", { url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: false } }, signal);
                         if (signal.aborted) return;
-                        const progress = res.body.progress.PLAY_ACTIVITY.value;
+                        const progress = res?.body?.progress?.PLAY_ACTIVITY?.value;
+                        if (typeof progress !== "number") throw new Error("Unexpected heartbeat response.");
                         Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
                         UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
-                        await this.sleep(20000, signal);
+                        await this.sleep(HEARTBEAT_INTERVAL_MS, signal);
                         if (lifecycleSignal.aborted || (signal.aborted && progress < secondsNeeded)) return;
                         if (progress >= secondsNeeded) {
-                            await api.post({ url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: true } });
+                            await this.request(api, "post", { url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: true } }, lifecycleSignal);
                             reachedEnd = true;
                             break;
                         }
                     }
+                    if (!reachedEnd && !signal.aborted) throw new Error("Quest did not reach its target in the expected time.");
                     if (!reachedEnd || lifecycleSignal.aborted) return;
                     Logger.info(this._config.info.name, "Quest completed!");
                     UI.showToast("Quest completed!", { type: "success" });
-                })();
+                })().catch(err => this.reportAsyncError(err, signal));
             }
             else if (taskName === "ACHIEVEMENT_IN_ACTIVITY") {
                 if (this._unsupportedQuests.has(quest.id)) return;
