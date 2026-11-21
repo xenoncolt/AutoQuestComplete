@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 
 const loggedErrors = [];
+const patchResults = [];
 
 function compareSemver(current, remote) {
     const a = current.split(".").map(Number);
@@ -21,7 +22,7 @@ class BdApiMock {
         this.Logger = { info() { }, warn() { }, error: (...args) => loggedErrors.push(args) };
         this.UI = { showToast() { }, showNotification() { } };
         this.Data = { load() { }, save() { } };
-        this.Patcher = { instead() { }, unpatchAll() { } };
+        this.Patcher = { instead: () => (patchResults.length ? patchResults.shift() : () => { }), unpatchAll() { } };
         this.Webpack = { Stores: {} };
         this.Utils = { semverCompare: compareSemver };
         this.React = {};
@@ -186,6 +187,23 @@ describe("task maps", () => {
         assert.equal(plugin.getQuestTaskInfo(quest(30)), "Play the game (~30 sec)");
         assert.equal(plugin.getQuestTaskInfo(quest(0)), "Play the game");
         assert.equal(plugin.getQuestTaskInfo({}), null);
+    });
+    test("patchInstead reverts earlier patches and throws when one patch fails", () => {
+        const plugin = createPlugin();
+        let reverted = 0;
+        patchResults.push(() => reverted++, null);
+        const target = { a() { }, b() { } };
+        assert.throws(() => plugin.patchInstead([[target, "a", () => { }], [target, "b", () => { }]]), /Could not patch b/);
+        assert.equal(reverted, 1);
+    });
+
+    test("patchInstead returns one function that reverts every patch", () => {
+        const plugin = createPlugin();
+        let reverted = 0;
+        patchResults.push(() => reverted++, () => reverted++);
+        const target = { a() { }, b() { } };
+        plugin.patchInstead([[target, "a", () => { }], [target, "b", () => { }]])();
+        assert.equal(reverted, 2);
     });
 });
 

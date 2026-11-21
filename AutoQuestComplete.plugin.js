@@ -897,6 +897,21 @@ class AutoQuestComplete {
         }
     }
 
+    // Patcher.instead returns null when a patch fails; in that case earlier patches are reverted and the run fails visibly.
+    patchInstead(targets) {
+        const unpatches = [];
+        const unpatchAll = () => unpatches.forEach(unpatch => unpatch());
+        for (const [module, functionName, callback] of targets) {
+            const unpatch = Patcher.instead(module, functionName, callback);
+            if (!unpatch) {
+                unpatchAll();
+                throw new Error(`Could not patch ${functionName}. Discord may have changed.`);
+            }
+            unpatches.push(unpatch);
+        }
+        return unpatchAll;
+    }
+
     generateFakePid(runningGameStore) {
         const usedPids = new Set((runningGameStore?.getRunningGames?.() ?? []).map(game => game.pid));
         let pid;
@@ -975,14 +990,15 @@ class AutoQuestComplete {
             };
             const realGames = RunningGameStore.getRunningGames();
             const fakeGames = [fakeGame];
-            const unpatchGames = Patcher.instead(RunningGameStore, "getRunningGames", () => fakeGames);
-            const unpatchGameForPid = Patcher.instead(RunningGameStore, "getGameForPID", (_, [gamePid]) => fakeGames.find(x => x.pid === gamePid));
+            const unpatchGames = this.patchInstead([
+                [RunningGameStore, "getRunningGames", () => fakeGames],
+                [RunningGameStore, "getGameForPID", (_, [gamePid]) => fakeGames.find(x => x.pid === gamePid)]
+            ]);
             FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames });
 
             const heartbeatHandler = this.createHeartbeatHandler(quest, taskName, secondsNeeded, () => stopSpoofing());
             const stopSpoofing = this.addCleanup(() => {
-                unpatchGames?.();
-                unpatchGameForPid?.();
+                unpatchGames();
                 FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
                 FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
             }, this._runCleanups);
@@ -998,14 +1014,14 @@ class AutoQuestComplete {
         const { FluxDispatcher, ApplicationStreamingStore } = dependencies;
         if (!this.hasApplicationId()) return;
         if (!this.hasDependencies(dependencies, ["FluxDispatcher", "ApplicationStreamingStore"])) return;
-        const unpatchStream = Patcher.instead(ApplicationStreamingStore, "getStreamerActiveStreamMetadata", () => ({
+        const unpatchStream = this.patchInstead([[ApplicationStreamingStore, "getStreamerActiveStreamMetadata", () => ({
             id: this._activeAppId,
             pid,
             sourceName: null
-        }));
+        })]]);
         const heartbeatHandler = this.createHeartbeatHandler(quest, taskName, secondsNeeded, () => stopSpoofing());
         const stopSpoofing = this.addCleanup(() => {
-            unpatchStream?.();
+            unpatchStream();
             FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
         }, this._runCleanups);
         FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
