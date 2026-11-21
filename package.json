@@ -1,0 +1,30 @@
+{
+  "name": "autoquestcomplete",
+  "version": "1.0.0",
+  "description": "> [!CAUTION]\r > As of April 7th 2026, Discord has expressed their intent to crack down on automating quest completion.\r > \r > Some users have received the following system message:\r > \r > <img width=\"836\" height=\"272\" alt=\"image\" src=\"https://github.com/user-attachments/assets/2a9604d7-0a05-44e9-ab2a-ce0490660cb1\" />\r > \r > Use the script at your own risk. You most likely WILL get flagged by doing so. [Learn more](https://discord.com/safety/platform-manipulation-policy-explainer)",
+  "main": "AutoQuestComplete.plugin.js",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xenoncolt/AutoQuestComplete.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/xenoncolt/AutoQuestComplete/issues"
+  },
+  "homepage": "https://github.com/xenoncolt/AutoQuestComplete#readme",
+  "devDependencies": {
+    "@betterdiscord/types": "^1.14.5",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0"
+  }
+}

@@ -1,15 +1,1 @@
 /node_modules
-package-lock.json
-/package.json
-/eslint.config.js
-/jsconfig.json
-
-# IDE
-/.idea/
-
-# GitHub Copilot
-/.github/copilot-instructions.md
-/.github/instructions/
-/.github/prompts/
-/.github/agents/
-/.github/skills/
