@@ -616,8 +616,6 @@ class AutoQuestComplete {
         const signal = this._abortController?.signal;
         if (!signal || signal.aborted) return;
         try {
-            delete window.$;
-
             let ApplicationStreamingStore = Webpack.Stores.ApplicationStreamingStore;
             let FluxDispatcher = Webpack.getByKeys('dispatch', 'subscribe', 'register', { searchExports: true });
             let api = Webpack.getModule(m => m?.Bo?.get)?.Bo;
