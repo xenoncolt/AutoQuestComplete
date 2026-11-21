@@ -350,12 +350,13 @@ class AutoQuestComplete {
     }
 
     loadUnsupportedQuests() {
-        let stored = {};
+        let stored = null;
         try {
-            stored = Data.load(this._config.info.name, "unsupportedQuests") || {};
+            stored = Data.load(this._config.info.name, "unsupportedQuests");
         } catch (err) {
-            stored = {};
+            Logger.error(this._config.info.name, "Failed to load unsupported quests", err);
         }
+        stored ??= {};
 
         const now = Date.now();
         this._storedUnsupportedQuests = {};
