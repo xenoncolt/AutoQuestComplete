@@ -25,7 +25,7 @@ const config = {
                 "New quests are now announced in **one combined notification** (\"3 new quests available\") with the real count, a short list and the number of quests that must be completed manually",
                 "Requires **BetterDiscord 1.14.5** or newer",
                 "Quest progress toasts are limited to one per minute",
-                "Update checks now validate the downloaded plugin file before offering it",
+                "The plugin checks the GitHub repository for a newer version on load and once a day, and lets you choose **Update Now** or **Update Later**",
                 "Thanks for the help griffinsectio and Thanks for creating issue TouhouJevil"
             ]
         },
@@ -155,6 +155,7 @@ const PROGRESS_TOAST_INTERVAL_MS = 60000;
 const MAX_REPORT_STACK_LENGTH = 1500;
 const UPDATE_TIMEOUT_MS = 15000;
 const UPDATE_NOTIFICATION_ID = "AutoQuestComplete-update";
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
 const MIN_BETTERDISCORD_VERSION = "1.14.5";
 
@@ -174,6 +175,7 @@ class AutoQuestComplete {
         this._notifiedQuests = new Set();
         this._notifyDebounce = null;
         this._notification = null;
+        this._updateNotification = null;
         this._notificationQuestIds = null;
         this._notifyRetries = 0;
         this._timers = new Set();
@@ -186,7 +188,6 @@ class AutoQuestComplete {
     }
 
     showChangelogOnce() {
-        const { name } = this._config.info;
         const version = this._version;
         try {
             const stored = Data.load("currentVersionInfo");
@@ -233,7 +234,7 @@ class AutoQuestComplete {
         }
         this._abortController = new AbortController();
         this.showChangelogOnce();
-        this.checkForUpdate();
+        this.scheduleUpdateChecks();
         this.loadSettings();
         this.loadUnsupportedQuests();
         this._questsStore = Webpack.Stores.QuestStore;
@@ -270,6 +271,8 @@ class AutoQuestComplete {
         this._timers.clear();
         this._notification?.close?.();
         this._notification = null;
+        this._updateNotification?.close?.();
+        this._updateNotification = null;
         this._notificationQuestIds = null;
         this._notifyRetries = 0;
         this.endRun();
@@ -1107,6 +1110,11 @@ class AutoQuestComplete {
             Utils.semverCompare(this._version, remoteMeta.version) > 0;
     }
 
+    scheduleUpdateChecks() {
+        this.checkForUpdate();
+        this.setTimer(() => this.scheduleUpdateChecks(), UPDATE_CHECK_INTERVAL_MS);
+    }
+
     async checkForUpdate() {
         if (!this._abortController) return;
         try {
@@ -1130,29 +1138,33 @@ class AutoQuestComplete {
         }
         try {
             const versionInfo = Data.load("currentVersionInfo") ?? {};
-                        Data.save("currentVersionInfo", { ...versionInfo, hasShownChangelog: false });
+            Data.save("currentVersionInfo", { ...versionInfo, hasShownChangelog: false });
         } catch (err) {
             Logger.error("Could not reset the changelog flag", err);
         }
+        UI.showToast("AutoQuestComplete was updated and will reload automatically.", { type: "success" });
     }
 
     newUpdateNotify(remoteMeta, remoteFile) {
         Logger.info("A new update is available!");
 
-        UI.showNotification({
+        this._updateNotification = UI.showNotification({
             title: `${this._config.info.name} Update Available!`,
-            content: `Version ${remoteMeta.version} is now available!`,
+            content: `Version ${remoteMeta.version} is now available (installed: ${this._version}).`,
             id: UPDATE_NOTIFICATION_ID,
             type: "info",
             duration: Infinity,
             actions: [
                 {
                     label: "Update Now",
-                    onClick: () => this.installUpdate(remoteFile)
+                    onClick: () => {
+                        this._updateNotification?.close?.();
+                        this.installUpdate(remoteFile);
+                    }
                 },
                 {
                     label: "Update Later",
-                    onClick: () => { }
+                    onClick: () => this._updateNotification?.close?.()
                 }
             ]
         });
