@@ -1049,8 +1049,8 @@ class AutoQuestComplete {
         }
         const streamKey = `call:${channelId}:1`;
         (async () => {
-            Logger.info("Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
-            UI.showToast(`Completing quest ${this._activeQuestName} - ${quest.config.messages.questName}`, { type: "info" });
+            Logger.info(`Completing quest ${this._activeQuestName}.`);
+            UI.showToast(`Completing quest ${this._activeQuestName}.`, { type: "info" });
             let reachedEnd = false;
             const maxHeartbeats = Math.ceil(Math.max(secondsNeeded - secondsDone, 0) / (HEARTBEAT_INTERVAL_MS / MS_PER_SECOND)) + HEARTBEAT_EXTRA_ATTEMPTS;
             for (let heartbeat = 0; heartbeat < maxHeartbeats && !signal.aborted; heartbeat++) {
