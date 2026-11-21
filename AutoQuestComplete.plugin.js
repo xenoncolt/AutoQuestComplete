@@ -139,7 +139,7 @@ const MAX_LISTED_QUESTS = 5;
 class AutoQuestComplete {
     constructor() {
         this._config = config;
-        this._questsStore = Webpack.Stores.QuestStore;
+        this._questsStore = null;
         this._router = null;
         this._boundHandleQuestChange = this.handleQuestChange.bind(this);
         this._boundNewQuestHandler = this.scheduleNewQuestCheck.bind(this);
@@ -158,47 +158,41 @@ class AutoQuestComplete {
         this._runCleanups = new Set();
         this._runController = null;
         this._abortController = null;
-        this.settings;
+        this.settings = null;
+    }
 
+    showChangelogOnce() {
+        const { name, version } = this._config.info;
         try {
-            let currentVersionInfo = {};
-            try {
-                currentVersionInfo = Object.assign({}, { version: this._config.info.version, hasShownChangelog: false }, Data.load(this._config.info.name, "currentVersionInfo"));
-            } catch (err) {
-                currentVersionInfo = { version: this._config.info.version, hasShownChangelog: false };
-            }
-            if (this._config.info.version != currentVersionInfo.version) currentVersionInfo.hasShownChangelog = false;
-            currentVersionInfo.version = this._config.info.version;
-            Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
+            const stored = Data.load(name, "currentVersionInfo");
+            const versionInfo = { hasShownChangelog: false, ...stored, version };
+            if (stored?.version !== version) versionInfo.hasShownChangelog = false;
 
-            this.checkForUpdate();
-
-            if (!currentVersionInfo.hasShownChangelog) {
+            if (!versionInfo.hasShownChangelog) {
                 UI.showChangelogModal({
                     title: "AutoQuestComplete Changelog",
-                    subtitle: this._config.info.version,
+                    subtitle: version,
                     changes: this._config.changelog
                 });
-                currentVersionInfo.hasShownChangelog = true;
-                Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
+                versionInfo.hasShownChangelog = true;
             }
-        }
-        catch (err) {
-            Logger.error(this._config.info.name, err);
+            Data.save(name, "currentVersionInfo", versionInfo);
+        } catch (err) {
+            Logger.error(name, "Could not show the changelog", err);
         }
     }
 
-
-
-
     start() {
         this._abortController = new AbortController();
+        this.showChangelogOnce();
+        this.checkForUpdate();
         const defaultSettings = this._flattenSettings().reduce((acc, setting) => {
             acc[setting.id] = setting.value;
             return acc;
         }, {});
         this.settings = Object.assign(defaultSettings, Data.load(this._config.info.name, "settings") || {});
         this.loadUnsupportedQuests();
+        this._questsStore = Webpack.Stores.QuestStore;
         try {
             if (!this._questsStore?.quests || !this._questsStore.addChangeListener) {
                 Logger.error(this._config.info.name, "QuestStore is unavailable, Discord may have changed.");
