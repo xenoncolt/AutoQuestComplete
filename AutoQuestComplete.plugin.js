@@ -79,35 +79,35 @@ const config = {
             settings: [
                 {
                     type: "switch",
-                    id: 4, // VIRTUAL_CURRENCY
+                    id: "reward_4", // VIRTUAL_CURRENCY
                     name: "Orbs",
                     note: "Notify for quests that reward Discord Orbs.",
                     value: true
                 },
                 {
                     type: "switch",
-                    id: 1, // REWARD_CODE
+                    id: "reward_1", // REWARD_CODE
                     name: "Redeemable Code",
                     note: "Notify for quests that reward a redeemable in-game code.",
                     value: true
                 },
                 {
                     type: "switch",
-                    id: 2, // IN_GAME
+                    id: "reward_2", // IN_GAME
                     name: "In-Game Reward",
                     note: "Notify for quests that reward an item directly in the promoted game.",
                     value: true
                 },
                 {
                     type: "switch", 
-                    id: 3, // COLLECTIBLE
+                    id: "reward_3", // COLLECTIBLE
                     name: "Collectible",
                     note: "Notify for quests that reward a Discord collectible (e.g. an avatar decoration).",
                     value: true
                 },
                 {
                     type: "switch",
-                    id: 5, // FRACTIONAL_PREMIUM
+                    id: "reward_5", // FRACTIONAL_PREMIUM
                     name: "Nitro Trial",
                     note: "Notify for quests that reward a free Nitro (premium) trial.",
                     value: true
@@ -135,6 +135,7 @@ const NOTIFY_DEBOUNCE_MS = 750;
 const NOTIFY_RETRY_MS = 300;
 const NOTIFY_MAX_RETRIES = 3;
 const MAX_LISTED_QUESTS = 5;
+const REWARD_SETTING_PREFIX = "reward_";
 const UPDATE_TIMEOUT_MS = 15000;
 const UPDATE_NOTIFICATION_ID = "AutoQuestComplete-update";
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
@@ -189,11 +190,7 @@ class AutoQuestComplete {
         this._abortController = new AbortController();
         this.showChangelogOnce();
         this.checkForUpdate();
-        const defaultSettings = this._flattenSettings().reduce((acc, setting) => {
-            acc[setting.id] = setting.value;
-            return acc;
-        }, {});
-        this.settings = Object.assign(defaultSettings, Data.load(this._config.info.name, "settings") || {});
+        this.loadSettings();
         this.loadUnsupportedQuests();
         this._questsStore = Webpack.Stores.QuestStore;
         try {
@@ -320,16 +317,40 @@ class AutoQuestComplete {
         );
     }
 
-    getSettingsPanel() {
-        for (const setting of this._flattenSettings()) {
-            setting.value = this.settings[setting.id];
+    loadSettings() {
+        const defaults = Object.fromEntries(this._flattenSettings().map(setting => [setting.id, setting.value]));
+        let stored = null;
+        try {
+            stored = Data.load(this._config.info.name, "settings");
+        } catch (err) {
+            Logger.error(this._config.info.name, "Failed to load settings, using defaults", err);
         }
+        const saved = stored && typeof stored === "object" ? stored : {};
+        for (const id of Object.keys(defaults)) {
+            const legacyKey = id.replace(REWARD_SETTING_PREFIX, "");
+            if (id.startsWith(REWARD_SETTING_PREFIX) && !(id in saved) && legacyKey in saved) saved[id] = saved[legacyKey];
+        }
+        this.settings = Object.assign(defaults, saved);
+    }
+
+    withCurrentValues(settings) {
+        return settings.map(setting => setting.type === "category" && Array.isArray(setting.settings)
+            ? { ...setting, settings: this.withCurrentValues(setting.settings) }
+            : { ...setting, value: this.settings[setting.id] ?? setting.value });
+    }
+
+    getSettingsPanel() {
+        if (!this.settings) this.loadSettings();
 
         return UI.buildSettingsPanel({
-            settings: this._config.settingsPanel,
+            settings: this.withCurrentValues(this._config.settingsPanel),
             onChange: (category, id, value) => {
                 this.settings[id] = value;
-                Data.save(this._config.info.name, "settings", this.settings);
+                try {
+                    Data.save(this._config.info.name, "settings", this.settings);
+                } catch (err) {
+                    Logger.error(this._config.info.name, "Failed to save settings", err);
+                }
             }
         });
     }
@@ -406,7 +427,7 @@ class AutoQuestComplete {
     shouldNotifyForQuest(quest) {
         const rewards = this.getQuestRewards(quest);
         if (!rewards.length) return true;
-        return rewards.some(reward => this.settings[reward?.type] !== false);
+        return rewards.some(reward => this.settings[`${REWARD_SETTING_PREFIX}${reward?.type}`] !== false);
     }
 
     getRewardText(quest) {
