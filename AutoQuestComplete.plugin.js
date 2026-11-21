@@ -877,7 +877,7 @@ class AutoQuestComplete {
             this._notifiedQuests.delete(quest.id);
 
             const tasks = quest.config?.taskConfigV2?.tasks ?? {};
-            const taskName = [...SUPPORTED_TASKS, "ACHIEVEMENT_IN_ACTIVITY"].find(x => tasks[x] != null);
+            const taskName = Object.keys(TASK_HANDLERS).find(x => tasks[x] != null);
 
             if (!taskName) {
                 this.skipUnsupportedQuest(quest);
