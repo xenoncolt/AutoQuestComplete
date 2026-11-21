@@ -937,7 +937,7 @@ class AutoQuestComplete {
     skipUnsupportedQuest(quest) {
         if (this._unsupportedQuests.has(quest.id)) return;
         this.markQuestUnsupported(quest);
-        Logger.info(`${this._activeQuestName} is not supported by this plugin. "Xbox and Playstation" Task.`);
+        Logger.info(`${this._activeQuestName} is not supported by this plugin (no supported task found).`);
         UI.showToast(`Skipping ${this._activeQuestName}.`, { type: "warning" });
         this.setTimer(() => this.handleQuestChange(), SKIP_NEXT_QUEST_DELAY_MS);
     }
