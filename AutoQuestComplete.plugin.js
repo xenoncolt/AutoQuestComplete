@@ -42,7 +42,8 @@ const config = {
                 "Settings and stored data load safely; reward settings keep their saved values",
                 "\"Go to Quests\" opens the quests page reliably and restores the page's focus state afterwards",
                 "The error report no longer includes local user paths",
-                "If Discord's functions cannot be patched, the quest stops with an error message instead of silently running without spoofing"
+                "If Discord's functions cannot be patched, the quest stops with an error message instead of silently running without spoofing",
+                "Critical startup errors are shown even when toasts are disabled in BetterDiscord",
             ]
         },
         {
@@ -257,7 +258,7 @@ class AutoQuestComplete {
     start() {
         if (!this.isBetterDiscordSupported()) {
             Logger.error(`BetterDiscord ${MIN_BETTERDISCORD_VERSION} or newer is required.`);
-            UI.showToast(`AutoQuestComplete requires BetterDiscord ${MIN_BETTERDISCORD_VERSION} or newer.`, { type: "error" });
+            UI.showToast(`AutoQuestComplete requires BetterDiscord ${MIN_BETTERDISCORD_VERSION} or newer.`, { type: "error", forceShow: true });
             return;
         }
         this._abortController = new AbortController();
@@ -269,7 +270,7 @@ class AutoQuestComplete {
         try {
             if (!this._questsStore?.quests || !this._questsStore.addChangeListener) {
                 Logger.error("QuestStore is unavailable, Discord may have changed.");
-                UI.showToast("AutoQuestComplete could not find the quest store.", { type: "error" });
+                UI.showToast("AutoQuestComplete could not find the quest store.", { type: "error", forceShow: true });
                 return;
             }
             this._questsStore.addChangeListener(this._boundHandleQuestChange);
@@ -282,7 +283,7 @@ class AutoQuestComplete {
             }
         } catch (err) {
             Logger.error("Error while starting AutoQuestComplete", err);
-            UI.showToast("Error while starting AutoQuestComplete", { type: "error" });
+            UI.showToast("Error while starting AutoQuestComplete", { type: "error", forceShow: true });
         }
     }
 
@@ -662,7 +663,7 @@ class AutoQuestComplete {
         const missing = names.filter(name => !dependencies[name]);
         if (!missing.length) return true;
         Logger.error(`Missing Discord modules: ${missing.join(", ")}`);
-        UI.showToast(`Could not find required Discord modules (${missing.join(", ")}). Discord may have changed.`, { type: "error" });
+        UI.showToast(`Could not find required Discord modules (${missing.join(", ")}). Discord may have changed.`, { type: "error", forceShow: true });
         return false;
     }
 
@@ -1195,14 +1196,10 @@ class AutoQuestComplete {
             actions: [
                 {
                     label: "Update Now",
-                    onClick: () => {
-                        this._updateNotification?.close?.();
-                        this.installUpdate(remoteFile);
-                    }
+                    onClick: () => this.installUpdate(remoteFile)
                 },
                 {
-                    label: "Update Later",
-                    onClick: () => this._updateNotification?.close?.()
+                    label: "Update Later"
                 }
             ]
         });
