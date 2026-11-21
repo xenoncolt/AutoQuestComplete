@@ -2,7 +2,7 @@
  * @name AutoQuestComplete
  * @description Automatically completes quests for you. Requires BetterDiscord 1.14.5 or newer. WARNING: Discord prohibits automating quest completion; using this plugin may get your account flagged or banned. Use at your own risk. Based on a script by @aamiaa.
  * @version 0.11.0
- * @author Xenon Colt
+ * @author Xenon Colt, Crytix
  * @authorId 709210314230726776
  * @authorLink https://github.com/xenoncolt
  * @website https://github.com/xenoncolt/AutoQuestComplete
