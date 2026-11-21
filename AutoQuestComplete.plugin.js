@@ -18,14 +18,6 @@ const config = {
         github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
     },
     changelog: [
-        // {
-        //     title: "New Features & Improvements",
-        //     type: "added",
-        //     items: [
-        //         "Quest notifications now show the game icon, reward (with the Nitro orb bonus), task type & time, publisher, and how soon the quest expires - so you know what you're getting before opening it.",
-        //         "Quests now load in the background automatically, so you get notified without having to open the Quests page first."
-        //     ]
-        // }
         {
             title: "New Features & Improvements",
             type: "added",
@@ -36,13 +28,6 @@ const config = {
                 "Thanks for the help griffinsectio and Thanks for creating issue TouhouJevil"
             ]
         }
-        // {
-        //     title: "Change And Warnings",
-        //     type: "changed",
-        //     items: [
-        //         "Discord probably implement quest only for Playstation and Xbox. I am not sure how its gonna works. But for now this plugin will ignore this type of quest"
-        //     ]
-        // }
     ],
     settingsPanel: [
         {
@@ -88,7 +73,7 @@ const config = {
                     value: true
                 },
                 {
-                    type: "switch", 
+                    type: "switch",
                     id: "reward_3", // COLLECTIBLE
                     name: "Collectible",
                     note: "Notify for quests that reward a Discord collectible (e.g. an avatar decoration).",
@@ -107,7 +92,6 @@ const config = {
 }
 
 const { Webpack, UI, Logger, Data, Utils, React, Patcher } = BdApi;
-
 
 const SUPPORTED_TASKS = ["WATCH_VIDEO", "WATCH_VIDEO_ON_MOBILE", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY"];
 const API_MAX_RETRIES = 3;
@@ -319,9 +303,6 @@ class AutoQuestComplete {
         return this._runController.signal;
     }
 
-
-
-
     _flattenSettings(settings = this._config.settingsPanel) {
         return settings.flatMap(setting =>
             setting.type === "category" && Array.isArray(setting.settings)
@@ -368,7 +349,6 @@ class AutoQuestComplete {
         });
     }
 
-
     loadUnsupportedQuests() {
         let stored = {};
         try {
@@ -380,8 +360,7 @@ class AutoQuestComplete {
         const now = Date.now();
         this._storedUnsupportedQuests = {};
         for (const [questId, expiresAt] of Object.entries(stored)) {
-            if (typeof expiresAt !== "number" || expiresAt <= now) continue; 
-            this._storedUnsupportedQuests[questId] = expiresAt;
+            if (typeof expiresAt !== "number" ||             expiresAt <= now) continue;            this._storedUnsupportedQuests[questId] = expiresAt;
             this._unsupportedQuests.add(questId);
         }
 
@@ -403,7 +382,6 @@ class AutoQuestComplete {
         }
     }
 
-
     getQuestApplicationId(quest) {
         const tasks = quest?.config?.taskConfigV2?.tasks ?? {};
         for (const task of Object.values(tasks)) {
@@ -413,7 +391,6 @@ class AutoQuestComplete {
         return quest?.config?.application?.id ?? null;
     }
 
-    
     resolveApplicationId(quest) {
         return quest?.config?.application?.id ?? this.getQuestApplicationId(quest);
     }
@@ -446,8 +423,7 @@ class AutoQuestComplete {
     getRewardText(quest) {
         const parts = this.getQuestRewards(quest).map(reward => {
             if (typeof reward?.orbQuantity === "number" && reward.orbQuantity > 0) {
-                return reward.premiumOrbQuantity && reward.premiumOrbQuantity !== reward.orbQuantity 
-                ? `${reward.orbQuantity} Orbs (${reward.premiumOrbQuantity} with Nitro)` : `${reward.orbQuantity} Orbs`;
+                return reward.premiumOrbQuantity &&                 reward.premiumOrbQuantity !== reward.orbQuantity                ? `${reward.orbQuantity} Orbs (${reward.premiumOrbQuantity} with Nitro)` : `${reward.orbQuantity} Orbs`;
             }
             return reward?.messages?.name;
         }).filter(Boolean);
@@ -495,7 +471,7 @@ class AutoQuestComplete {
 
     buildQuestIcon(quest) {
         const url = this.getQuestIconUrl(quest);
-        if (!url || !React) return undefined;
+        if (!url) return undefined;
         return () => React.createElement("img", {
             src: url,
             width: 36,
@@ -511,15 +487,6 @@ class AutoQuestComplete {
         const task = this.getQuestTaskInfo(quest);
         const publisher = quest?.config?.messages?.gamePublisher;
         const expiresIn = this.formatRelativeTime(quest?.config?.expiresAt);
-
-        if (!React) {
-            return [intro,
-                reward && `Reward: ${reward}`,
-                task && `Task: ${task}`,
-                publisher && `Publisher: ${publisher}`,
-                expiresIn && `Expires in ${expiresIn}`
-            ].filter(Boolean).join(" • ");
-        }
 
         const e = React.createElement;
         const row = (label, value) => value
@@ -650,7 +617,6 @@ class AutoQuestComplete {
         if (freshQuests.length) this.showQuestNotification(freshQuests);
     }
 
-
     getRouter() {
         this._router ??= Webpack.getModule(m => m?.transitionTo && m?.replaceWith && m?.getHistory, { searchExports: true });
         return this._router;
@@ -677,7 +643,6 @@ class AutoQuestComplete {
             Logger.error(this._config.info.name, "Failed to open quests page", err);
         }
     }
-
 
     focusQuestContainer(quest) {
         const quest_title_id = `quest-tile-${quest.id}`;
@@ -725,7 +690,6 @@ class AutoQuestComplete {
 
         this.setTimer(highlight_container, FOCUS_POLL_MS);
     }
-
 
     pluralize(count, noun) {
         return `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -828,7 +792,6 @@ class AutoQuestComplete {
             !x.userStatus?.completedAt &&
             new Date(x.config.expiresAt).getTime() > Date.now()
         );
-        // Logger.info(this._config.info.name, "Quest: ", quest);
 
         if (quest && quest.id !== this._activeQuestId) {
             this.activateQuest(quest);
