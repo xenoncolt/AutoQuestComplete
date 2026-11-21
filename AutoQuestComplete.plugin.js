@@ -25,7 +25,8 @@ const config = {
                 "Requires **BetterDiscord 1.14.5** or newer",
                 "Quest progress toasts are limited to one per minute",
                 "The plugin checks the GitHub repository for a newer version on load and once a day, and lets you choose **Update Now** or **Update Later**; a toast confirms the installed update",
-                "The update source is read from the plugin's `@source` header",
+                "The update source is read from the plugin's `@source` header, which now links to the file on GitHub",
+                "The update notification stays visible for one hour and is shown again with the next daily check",
                 "Thanks for the help griffinsectio and Thanks for creating issue TouhouJevil"
             ]
         },
@@ -40,7 +41,8 @@ const config = {
                 "Quests are tracked by their id, so two quests with the same name no longer interfere",
                 "Settings and stored data load safely; reward settings keep their saved values",
                 "\"Go to Quests\" opens the quests page reliably and restores the page's focus state afterwards",
-                "The error report no longer includes local user paths"
+                "The error report no longer includes local user paths",
+                "If Discord's functions cannot be patched, the quest stops with an error message instead of silently running without spoofing"
             ]
         },
         {
