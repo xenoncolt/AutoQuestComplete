@@ -6,7 +6,7 @@
  * @authorId 709210314230726776
  * @authorLink https://github.com/xenoncolt
  * @website https://github.com/xenoncolt/AutoQuestComplete
- * @source https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js
+ * @source https://github.com/xenoncolt/AutoQuestComplete/blob/main/AutoQuestComplete.plugin.js
  * @invite vJRe78YmN8
  */
 
@@ -179,6 +179,8 @@ const UPDATE_NOTIFICATION_ID = "AutoQuestComplete-update";
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const UPDATE_NOTIFICATION_DURATION_MS = 60 * 60 * 1000;
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
+const GITHUB_BLOB_PATTERN = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/;
+const GITHUB_RAW_PREFIX = "https://raw.githubusercontent.com/";
 const MIN_BETTERDISCORD_VERSION = "1.14.5";
 
 class AutoQuestComplete {
@@ -1117,10 +1119,18 @@ class AutoQuestComplete {
         });
     }
 
+    // @source links to the file on GitHub (see BD docs); the download uses the matching raw URL.
+    getRawSourceUrl() {
+        const blob = this._sourceUrl.match(GITHUB_BLOB_PATTERN);
+        if (blob) return `https://raw.githubusercontent.com/${blob[1]}/${blob[2]}/${blob[3]}`;
+        return this._sourceUrl.startsWith(GITHUB_RAW_PREFIX) ? this._sourceUrl : null;
+    }
+
     async fetchRemotePlugin() {
         const signal = AbortSignal.any([this._abortController.signal, AbortSignal.timeout(UPDATE_TIMEOUT_MS)]);
-        if (!this._sourceUrl.startsWith("https://")) throw new Error("The plugin header has no valid @source URL");
-        const response = await fetch(this._sourceUrl, { signal });
+        const rawUrl = this.getRawSourceUrl();
+        if (!rawUrl) throw new Error("The plugin header has no valid GitHub @source URL");
+        const response = await fetch(rawUrl, { signal });
         if (!response.ok) throw new Error(`Update server responded with ${response.status}`);
         const fileContent = await response.text();
         return { fileContent, remoteMeta: this.parseMeta(fileContent) };

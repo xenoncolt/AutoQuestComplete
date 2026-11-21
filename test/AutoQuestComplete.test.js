@@ -164,7 +164,20 @@ describe("update helpers", () => {
         assert.equal(plugin.isValidUpdate({ name: "AutoQuestComplete", version: "latest" }), false);
     });
 
-    test("fetchRemotePlugin rejects a missing or insecure @source", async () => {
+    test("getRawSourceUrl maps a GitHub file link to its raw URL", () => {
+        const blob = "https://github.com/xenoncolt/AutoQuestComplete/blob/main/AutoQuestComplete.plugin.js";
+        const raw = "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js";
+        assert.equal(createPlugin({ version: "1.0.0", source: blob }).getRawSourceUrl(), raw);
+        assert.equal(createPlugin({ version: "1.0.0", source: raw }).getRawSourceUrl(), raw);
+    });
+
+    test("getRawSourceUrl rejects missing, non-GitHub and insecure sources", () => {
+        assert.equal(createPlugin({ version: "1.0.0" }).getRawSourceUrl(), null);
+        assert.equal(createPlugin({ version: "1.0.0", source: "https://example.com/x.js" }).getRawSourceUrl(), null);
+        assert.equal(createPlugin({ version: "1.0.0", source: "http://github.com/a/b/blob/main/x.js" }).getRawSourceUrl(), null);
+    });
+
+    test("fetchRemotePlugin rejects a missing or unsupported @source", async () => {
         const plugin = createPlugin({ version: "1.0.0", source: "http://example.com/x.js" });
         plugin._abortController = new AbortController();
         await assert.rejects(() => plugin.fetchRemotePlugin(), /@source/);
