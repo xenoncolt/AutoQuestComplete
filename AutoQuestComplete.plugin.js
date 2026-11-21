@@ -134,6 +134,9 @@ class AutoQuestComplete {
         this._storedUnsupportedQuests = {};
         this._notifiedQuests = new Set();
         this._remindersTime = new Map();
+        this._timers = new Set();
+        this._cleanups = new Set();
+        this._abortController = null;
         this.settings;
 
         try {
@@ -168,6 +171,7 @@ class AutoQuestComplete {
 
 
     start() {
+        this._abortController = new AbortController();
         const defaultSettings = this._flattenSettings().reduce((acc, setting) => {
             acc[setting.id] = setting.value;
             return acc;
@@ -199,16 +203,70 @@ class AutoQuestComplete {
     }
 
     stop() {
+        this._abortController?.abort();
+        this._abortController = null;
         if (this._questsStore && this._questsStore.removeChangeListener) {
             this._questsStore.removeChangeListener(this._boundHandleQuestChange);
             this._questsStore.removeChangeListener(this._boundNewQuestHandler);
         }
-        for (const [questId, timeout] of this._remindersTime.entries()) {
+        for (const timeout of this._remindersTime.values()) {
             clearTimeout(timeout);
         }
-        this._unsupportedQuests.clear();
+        for (const timeout of this._timers) {
+            clearTimeout(timeout);
+        }
+        this._timers.clear();
+        this.runCleanups();
+        this._activeQuestId = null;
+        this._activeQuestName = null;
+        this._activeAppId = null;
         this._notifiedQuests.clear();
         this._remindersTime.clear();
+    }
+
+    setTimer(callback, delay) {
+        const timer = setTimeout(() => {
+            this._timers.delete(timer);
+            callback();
+        }, delay);
+        this._timers.add(timer);
+        return timer;
+    }
+
+    sleep(delay, signal) {
+        return new Promise(resolve => {
+            if (signal.aborted) {
+                resolve();
+                return;
+            }
+            const onAbort = () => {
+                clearTimeout(timer);
+                resolve();
+            };
+            const timer = setTimeout(() => {
+                signal.removeEventListener("abort", onAbort);
+                resolve();
+            }, delay);
+            signal.addEventListener("abort", onAbort, { once: true });
+        });
+    }
+
+    // Registers a cleanup that runs once, either on demand via the returned function or in stop().
+    addCleanup(cleanup) {
+        const run = () => {
+            if (!this._cleanups.delete(run)) return;
+            try {
+                cleanup();
+            } catch (err) {
+                Logger.error(this._config.info.name, "Cleanup failed", err);
+            }
+        };
+        this._cleanups.add(run);
+        return run;
+    }
+
+    runCleanups() {
+        for (const run of [...this._cleanups]) run();
     }
 
 
@@ -465,7 +523,7 @@ class AutoQuestComplete {
 
             if (!quest_container) {
                 if (attempts++ < 40) {
-                    setTimeout(highlight_container, 250);
+                    this.setTimer(highlight_container, 250);
                 } else {
                     Logger.warn(this._config.info.name, `Gave up waiting for ${quest_title_id} to render.`);
                 }
@@ -481,21 +539,23 @@ class AutoQuestComplete {
             const originalBoxShadow = quest_container.style.boxShadow;
             const originalTransition = quest_container.style.transition;
 
-            quest_container.style.transition = "box-shadow 180ms ease, outline 180ms ease";
-            quest_container.style.outline = "3px solid rgba(88, 101, 242, 0.95)";
-            quest_container.style.outlineOffset = "6px";
-            quest_container.style.boxShadow = "0 0 0 8px rgba(88, 101, 242, 0.2)";
-
-            setTimeout(() => {
+            const restoreStyles = this.addCleanup(() => {
                 if (!quest_container.isConnected) return;
                 quest_container.style.outline = originalOutline;
                 quest_container.style.outlineOffset = originalOutlineOffset;
                 quest_container.style.boxShadow = originalBoxShadow;
                 quest_container.style.transition = originalTransition;
-            }, 5000);
+            });
+
+            quest_container.style.transition = "box-shadow 180ms ease, outline 180ms ease";
+            quest_container.style.outline = "3px solid rgba(88, 101, 242, 0.95)";
+            quest_container.style.outlineOffset = "6px";
+            quest_container.style.boxShadow = "0 0 0 8px rgba(88, 101, 242, 0.2)";
+
+            this.setTimer(restoreStyles, 5000);
         };
 
-        setTimeout(highlight_container, 250);
+        this.setTimer(highlight_container, 250);
     }
 
 
@@ -552,6 +612,8 @@ class AutoQuestComplete {
     }
 
     runQuest(quest) {
+        const signal = this._abortController?.signal;
+        if (!signal || signal.aborted) return;
         try {
             delete window.$;
 
@@ -585,7 +647,7 @@ class AutoQuestComplete {
                 const taskList = Object.keys(quest.config.taskConfigV2.tasks).join(", ");
                 Logger.info(this._config.info.name, `${this._activeQuestName} is not supported by this plugin. "Xbox and Playstation" Task.`);
                 UI.showToast(`Skipping ${this._activeQuestName}.`, { type: "warning" });
-                setTimeout(() => this.handleQuestChange(), 1000);
+                this.setTimer(() => this.handleQuestChange(), 1000);
                 return;
             }
 
@@ -598,9 +660,10 @@ class AutoQuestComplete {
                 let isFinished = false;
 
                 (async () => {
-                    while (true) {
+                    while (!signal.aborted) {
                         const remain = Math.min(speed, secondsNeeded - secondsDone);
-                        await new Promise(resolve => setTimeout(resolve, remain * 1000));
+                        await this.sleep(remain * 1000, signal);
+                        if (signal.aborted) return;
                         const timestamp = secondsDone + speed;
 
 
@@ -613,6 +676,7 @@ class AutoQuestComplete {
                             break;
                         }
                     }
+                    if (signal.aborted) return;
                     if (!isFinished) {
                         await api.post({ url: `/quests/${quest.id}/video-progress`, body: { timestamp: secondsNeeded } });
                     }
@@ -630,6 +694,7 @@ class AutoQuestComplete {
                     return;
                 }
                 api.get({ url: `/applications/public?application_ids=${this._activeQuestId}` }).then(res => {
+                    if (signal.aborted) return;
                     const appData = res.body[0];
                     const exeName = appData.executables?.find(x => x.os === "win32")?.name?.replace(">", "") ?? appData.name.replace(/[\/\\:*?"<>|]/g, "");
                     const fakeGame = {
@@ -649,10 +714,16 @@ class AutoQuestComplete {
                     const fakeGames = [fakeGame];
                     const realGetRunningGames = RunningGameStore.getRunningGames;
                     const realGetGameForPID = RunningGameStore.getGameForPID;
-                    //games.push(fakeGame);
                     RunningGameStore.getRunningGames = () => fakeGames;
                     RunningGameStore.getGameForPID = (pid) => fakeGames.find(x => x.pid === pid);
                     FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames });
+
+                    const stopSpoofing = this.addCleanup(() => {
+                        RunningGameStore.getRunningGames = realGetRunningGames;
+                        RunningGameStore.getGameForPID = realGetGameForPID;
+                        FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
+                        FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                    });
 
                     let fn = data => {
                         let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.PLAY_ON_DESKTOP.value);
@@ -661,15 +732,7 @@ class AutoQuestComplete {
                         if (progress >= secondsNeeded) {
                             Logger.info(this._config.info.name, "Quest completed!");
                             UI.showToast("Quest completed!", { type: "success" });
-                            // const idx = games.indexOf(fakeGame);
-                            // if(idx > -1) {
-                            //     games.splice(idx, 1);
-                            //     FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: []});
-                            // }
-                            RunningGameStore.getRunningGames = realGetRunningGames;
-                            RunningGameStore.getGameForPID = realGetGameForPID;
-                            FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
-                            FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                            stopSpoofing();
                         }
                     };
                     FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
@@ -678,11 +741,15 @@ class AutoQuestComplete {
                 });
             }
             else if (taskName === "STREAM_ON_DESKTOP") {
-                this._originalStreamerFunc = ApplicationStreamingStore.getStreamerActiveStreamMetadata;
+                const realStreamerFunc = ApplicationStreamingStore.getStreamerActiveStreamMetadata;
                 ApplicationStreamingStore.getStreamerActiveStreamMetadata = () => ({
                     id: this._activeQuestId,
                     pid,
                     sourceName: null
+                });
+                const stopSpoofing = this.addCleanup(() => {
+                    ApplicationStreamingStore.getStreamerActiveStreamMetadata = realStreamerFunc;
+                    FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
                 });
                 let fn = data => {
                     let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.STREAM_ON_DESKTOP.value);
@@ -691,8 +758,7 @@ class AutoQuestComplete {
                     if (progress >= secondsNeeded) {
                         Logger.info(this._config.info.name, "Quest completed!");
                         UI.showToast("Quest completed!", { type: "success" });
-                        ApplicationStreamingStore.getStreamerActiveStreamMetadata = this._originalStreamerFunc;
-                        FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+                        stopSpoofing();
                     }
                 };
                 FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
@@ -706,17 +772,20 @@ class AutoQuestComplete {
                 (async () => {
                     Logger.info(this._config.info.name, "Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
                     UI.showToast(`Completing quest ${this._activeQuestName} - ${quest.config.messages.questName}`, { type: "info" });
-                    while (true) {
+                    while (!signal.aborted) {
                         const res = await api.post({ url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: false } });
+                        if (signal.aborted) return;
                         const progress = res.body.progress.PLAY_ACTIVITY.value;
                         Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
                         UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
-                        await new Promise(resolve => setTimeout(resolve, 20000));
+                        await this.sleep(20000, signal);
+                        if (signal.aborted) return;
                         if (progress >= secondsNeeded) {
                             await api.post({ url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: true } });
                             break;
                         }
                     }
+                    if (signal.aborted) return;
                     Logger.info(this._config.info.name, "Quest completed!");
                     UI.showToast("Quest completed!", { type: "success" });
                 })();
@@ -731,7 +800,7 @@ class AutoQuestComplete {
                             const started = Date.now();
                             const check = () => {
                                 if (!document.querySelector('[role="dialog"]') || Date.now() - started > 3000) return resolve();
-                                setTimeout(check, 100);
+                                this.setTimer(check, 100);
                             };
                             check();
                         });
@@ -739,7 +808,7 @@ class AutoQuestComplete {
                         this.focusQuestContainer(quest);
                     }
                 });
-                setTimeout(() => this.handleQuestChange(), 5000);
+                this.setTimer(() => this.handleQuestChange(), 5000);
             }
         } catch (err) {
             UI.showConfirmationModal("Error", ["An error occurred while trying to complete the quest. Please reach out to developer with the following information:", `Quest Name: ${this._activeQuestName}`, `Error: ${err.message}`, `Or click to send report to create an issue on github`], {
