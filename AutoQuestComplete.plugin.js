@@ -188,7 +188,36 @@ const GITHUB_BLOB_PATTERN = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+
 const GITHUB_RAW_PREFIX = "https://raw.githubusercontent.com/";
 const MIN_BETTERDISCORD_VERSION = "1.14.5";
 
+/**
+ * Discord quest object as provided by the QuestStore (only the fields used here).
+ * @typedef {object} Quest
+ * @property {string} id
+ * @property {object} [config] - Quest configuration: messages, assets, rewards, expiry and task definitions.
+ * @property {object} [userStatus] - Per-user state: enrollment, completion and task progress.
+ */
+
+/**
+ * Everything a task handler needs to complete one quest.
+ * @typedef {object} TaskContext
+ * @property {Quest} quest
+ * @property {string} taskName - Key of the quest task, e.g. `WATCH_VIDEO`.
+ * @property {number} secondsNeeded - Target of the task in seconds.
+ * @property {number} secondsDone - Progress already reported by Discord in seconds.
+ * @property {AbortSignal} signal - Aborted when this quest run ends.
+ * @property {AbortSignal} lifecycleSignal - Aborted when the plugin stops.
+ * @property {object} dependencies - Result of `resolveDependencies()`.
+ * @property {number} pid - Fake process id for game and stream spoofing.
+ */
+
+/**
+ * Auto-completes Discord quests that can be solved client-side.
+ * Everything created in `start()` is released in `stop()`.
+ */
 class AutoQuestComplete {
+    /**
+     * Only stores state; all side effects happen in `start()`.
+     * @param {{version?: string, source?: string}} [meta] - Plugin metadata supplied by BetterDiscord.
+     */
     constructor(meta) {
         this._version = meta?.version ?? "0.0.0";
         this._sourceUrl = meta?.source ?? "";
@@ -217,6 +246,7 @@ class AutoQuestComplete {
         this.settings = null;
     }
 
+    /** Shows the changelog modal once per installed version. */
     showChangelogOnce() {
         const version = this._version;
         try {
@@ -238,16 +268,26 @@ class AutoQuestComplete {
         }
     }
 
+    /**
+     * @returns {boolean} False only if BetterDiscord reports a semver version below the minimum.
+     */
     isBetterDiscordSupported() {
         const current = BdApi.version;
         if (!SEMVER_PATTERN.test(current ?? "")) return true;
         return Utils.semverCompare(MIN_BETTERDISCORD_VERSION, current) >= 0;
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {boolean} True if the quest is neither completed nor expired.
+     */
     isQuestOpen(quest) {
         return !quest.userStatus?.completedAt && new Date(quest.config?.expiresAt).getTime() > Date.now();
     }
 
+    /**
+     * @returns {Quest|undefined} The first accepted, open quest that is not marked unsupported.
+     */
     findEnrolledQuest() {
         return this.getQuests().find(x =>
             !this._unsupportedQuests.has(x.id) &&
@@ -256,6 +296,7 @@ class AutoQuestComplete {
         );
     }
 
+    /** BetterDiscord lifecycle: loads data, subscribes to quest changes and starts the update checks. */
     start() {
         if (!this.isBetterDiscordSupported()) {
             Logger.error(`BetterDiscord ${MIN_BETTERDISCORD_VERSION} or newer is required.`);
@@ -288,6 +329,7 @@ class AutoQuestComplete {
         }
     }
 
+    /** BetterDiscord lifecycle: releases timers, notifications, listeners, patches and the running quest. */
     stop() {
         this._abortController?.abort();
         this._abortController = null;
@@ -314,11 +356,21 @@ class AutoQuestComplete {
         this._notifiedQuests.clear();
     }
 
+    /**
+     * Cancels a timer created by `setTimer`.
+     * @param {number} timer
+     */
     clearTimer(timer) {
         clearTimeout(timer);
         this._timers.delete(timer);
     }
 
+    /**
+     * Starts a timer that is cancelled automatically in `stop()`.
+     * @param {Function} callback
+     * @param {number} delay - Delay in milliseconds.
+     * @returns {number} The timer id.
+     */
     setTimer(callback, delay) {
         const timer = setTimeout(() => {
             this._timers.delete(timer);
@@ -328,6 +380,12 @@ class AutoQuestComplete {
         return timer;
     }
 
+    /**
+     * Waits for the delay or until the signal aborts. Always resolves, never rejects.
+     * @param {number} delay - Delay in milliseconds.
+     * @param {AbortSignal} signal
+     * @returns {Promise<void>}
+     */
     sleep(delay, signal) {
         return new Promise(resolve => {
             if (signal.aborted) {
@@ -346,7 +404,12 @@ class AutoQuestComplete {
         });
     }
 
-    // Registers a cleanup that runs once, either on demand via the returned function or when its scope is flushed.
+    /**
+     * Registers a cleanup that runs once, either on demand via the returned function or when its scope is flushed.
+     * @param {Function} cleanup
+     * @param {Set<Function>} [scope] - Defaults to the plugin-wide cleanups.
+     * @returns {Function} Runs the cleanup immediately, if it has not run yet.
+     */
     addCleanup(cleanup, scope = this._cleanups) {
         const run = () => {
             if (!scope.delete(run)) return;
@@ -360,17 +423,25 @@ class AutoQuestComplete {
         return run;
     }
 
+    /**
+     * Runs every cleanup registered in the scope.
+     * @param {Set<Function>} [scope] - Defaults to the plugin-wide cleanups.
+     */
     runCleanups(scope = this._cleanups) {
         for (const run of [...scope]) run();
     }
 
-    // Cancels the running quest (loops, spoofing hooks, subscribers) so only one run is active at a time.
+    /** Cancels the running quest (loops, spoofing hooks, subscribers) so only one run is active at a time. */
     endRun() {
         this._runController?.abort();
         this._runController = null;
         this.runCleanups(this._runCleanups);
     }
 
+    /**
+     * Ends the previous run and begins a new one.
+     * @returns {AbortSignal} Aborted when this run ends.
+     */
     startRun() {
         this.endRun();
         this._runController = new AbortController();
@@ -378,6 +449,10 @@ class AutoQuestComplete {
         return this._runController.signal;
     }
 
+    /**
+     * @param {object[]} [settings] - Settings panel definition, defaults to the plugin's own.
+     * @returns {object[]} All settings with categories resolved recursively.
+     */
     _flattenSettings(settings = this._config.settingsPanel) {
         return settings.flatMap(setting =>
             setting.type === "category" && Array.isArray(setting.settings)
@@ -386,6 +461,7 @@ class AutoQuestComplete {
         );
     }
 
+    /** Merges the stored settings over the defaults, including the legacy reward keys. */
     loadSettings() {
         const defaults = Object.fromEntries(this._flattenSettings().map(setting => [setting.id, setting.value]));
         let stored = null;
@@ -402,12 +478,20 @@ class AutoQuestComplete {
         this.settings = Object.assign(defaults, saved);
     }
 
+    /**
+     * @param {object[]} settings - Settings panel definition.
+     * @returns {object[]} A copy whose values are the current settings.
+     */
     withCurrentValues(settings) {
         return settings.map(setting => setting.type === "category" && Array.isArray(setting.settings)
             ? { ...setting, settings: this.withCurrentValues(setting.settings) }
             : { ...setting, value: this.settings[setting.id] ?? setting.value });
     }
 
+    /**
+     * BetterDiscord settings panel hook.
+     * @returns {HTMLElement|React.ReactNode} The settings panel.
+     */
     getSettingsPanel() {
         if (!this.settings) this.loadSettings();
 
@@ -424,6 +508,7 @@ class AutoQuestComplete {
         });
     }
 
+    /** Loads the stored unsupported quests and drops entries that have expired. */
     loadUnsupportedQuests() {
         let stored = null;
         try {
@@ -444,6 +529,10 @@ class AutoQuestComplete {
         this.saveUnsupportedQuests();
     }
 
+    /**
+     * Remembers the quest as unsupported until it expires.
+     * @param {Quest} quest
+     */
     markQuestUnsupported(quest) {
         this._unsupportedQuests.add(quest.id);
         const expiresAt = new Date(quest?.config?.expiresAt).getTime();
@@ -451,6 +540,7 @@ class AutoQuestComplete {
         this.saveUnsupportedQuests();
     }
 
+    /** Persists the unsupported quests; failures are logged. */
     saveUnsupportedQuests() {
         try {
             Data.save("unsupportedQuests", this._storedUnsupportedQuests);
@@ -459,6 +549,10 @@ class AutoQuestComplete {
         }
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {string|null} The application id of the first task, or of the quest itself.
+     */
     getQuestApplicationId(quest) {
         const tasks = quest?.config?.taskConfigV2?.tasks ?? {};
         for (const task of Object.values(tasks)) {
@@ -468,35 +562,63 @@ class AutoQuestComplete {
         return quest?.config?.application?.id ?? null;
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {string|null} The quest's own application id, falling back to the task's.
+     */
     resolveApplicationId(quest) {
         return quest?.config?.application?.id ?? this.getQuestApplicationId(quest);
     }
 
+    /**
+     * Makes the quest the active one.
+     * @param {Quest} quest
+     */
     activateQuest(quest) {
         this._activeQuestId = quest.id;
         this._activeAppId = this.resolveApplicationId(quest);
         this._activeQuestName = this.getQuestName(quest);
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {string} The quest or game title.
+     */
     getQuestName(quest) {
         return quest?.config?.messages?.questName ?? quest?.config?.messages?.gameTitle ?? "Unknown Quest";
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {object[]} The quest's rewards.
+     */
     getQuestRewards(quest) {
         return quest?.config?.rewardsConfig?.rewards ?? [];
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {boolean} True if the quest has a task this plugin can complete.
+     */
     isQuestSupported(quest) {
         const tasks = quest?.config?.taskConfigV2?.tasks ?? {};
         return SUPPORTED_TASKS.some(x => tasks[x] != null);
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {boolean} True if any reward of the quest is enabled in the settings.
+     */
     shouldNotifyForQuest(quest) {
         const rewards = this.getQuestRewards(quest);
         if (!rewards.length) return true;
         return rewards.some(reward => this.settings[`${REWARD_SETTING_PREFIX}${reward?.type}`] !== false);
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {string|null} The rewards as readable text, or null if there are none.
+     */
     getRewardText(quest) {
         const parts = this.getQuestRewards(quest).map(reward => {
             if (typeof reward?.orbQuantity === "number" && reward.orbQuantity > 0) {
@@ -510,6 +632,10 @@ class AutoQuestComplete {
         return parts.length ? parts.join(", ") : null;
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {string|null} The task label with its approximate duration, or null if the task is unknown.
+     */
     getQuestTaskInfo(quest) {
         const tasks = quest?.config?.taskConfigV2?.tasks ?? {};
         const taskName = Object.keys(TASK_LABELS).find(x => tasks[x] != null);
@@ -520,6 +646,10 @@ class AutoQuestComplete {
         return `${TASK_LABELS[taskName]} (~${duration})`;
     }
 
+    /**
+     * @param {string} dateStr - Date the time is measured to.
+     * @returns {string|null} The remaining time as `1d 2h`, `3h 4m` or `5m`, or null if the date is past or invalid.
+     */
     formatRelativeTime(dateStr) {
         const ms = new Date(dateStr).getTime() - Date.now();
         if (!Number.isFinite(ms) || ms <= 0) return null;
@@ -531,6 +661,10 @@ class AutoQuestComplete {
         return `${minutes}m`;
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {string|null} The CDN URL of the quest's tile image, or null if it has none.
+     */
     getQuestIconUrl(quest) {
         const assets = quest?.config?.assets ?? {};
         const file = assets.gameTileLight || assets.gameTileDark || assets.logotypeLight;
@@ -538,6 +672,10 @@ class AutoQuestComplete {
         return `https://cdn.discordapp.com/${file}`;
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {Function|undefined} A React component for the notification icon, or undefined without an image.
+     */
     buildQuestIcon(quest) {
         const url = this.getQuestIconUrl(quest);
         if (!url) return undefined;
@@ -550,6 +688,10 @@ class AutoQuestComplete {
         });
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {React.ReactElement} The notification body for a single quest.
+     */
     buildNotificationContent(quest) {
         const intro = this.isQuestSupported(quest) ? `Accept "${this.getQuestName(quest)}" to start auto-completing.` : `"${this.getQuestName(quest)}" has to be completed manually, AutoQuestComplete can't do this quest type for you.`;
         const reward = this.getRewardText(quest);
@@ -572,10 +714,17 @@ class AutoQuestComplete {
         );
     }
 
+    /**
+     * @returns {Quest[]} All quests currently known to the QuestStore.
+     */
     getQuests() {
         return [...(this._questsStore?.quests?.values() ?? [])];
     }
 
+    /**
+     * Looks up the Discord modules needed for a run. Missing modules are `undefined`; see `hasDependencies`.
+     * @returns {{api: object, FluxDispatcher: object, ApplicationStreamingStore: object, RunningGameStore: object}}
+     */
     resolveDependencies() {
         return {
             api: Webpack.getByKeys("get", "post", "put", "patch", "del", { searchExports: true }),
@@ -586,11 +735,20 @@ class AutoQuestComplete {
         };
     }
 
+    /**
+     * @param {{status?: number}} err
+     * @returns {boolean} True for network failures, rate limits and server errors.
+     */
     isRetryableError(err) {
         const status = err?.status;
         return status === undefined || status === HTTP_TOO_MANY_REQUESTS || status >= HTTP_SERVER_ERROR;
     }
 
+    /**
+     * @param {{body?: {retry_after?: number}}} err
+     * @param {number} attempt - Zero-based retry attempt.
+     * @returns {number} The delay in milliseconds: `retry_after` if given, otherwise exponential, capped.
+     */
     getBackoffDelay(err, attempt) {
         const retryAfterSeconds = Number(err?.body?.retry_after);
         const delay = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
@@ -599,7 +757,14 @@ class AutoQuestComplete {
         return Math.min(delay, API_MAX_BACKOFF_MS);
     }
 
-    // Retries rate limits, server errors and network failures with backoff; other errors are thrown immediately.
+    /**
+     * Retries rate limits, server errors and network failures with backoff; other errors are thrown immediately.
+     * @param {object} api - Discord HTTP module.
+     * @param {string} method - Method name on the module, e.g. `post`.
+     * @param {{url: string, body?: object}} options
+     * @param {AbortSignal} signal - Stops retrying once aborted.
+     * @returns {Promise<object>} The API response.
+     */
     async request(api, method, options, signal) {
         for (let attempt = 0; ; attempt++) {
             try {
@@ -613,6 +778,11 @@ class AutoQuestComplete {
         }
     }
 
+    /**
+     * Logs and shows an error from an async quest loop, unless the run was cancelled.
+     * @param {Error} err
+     * @param {AbortSignal} signal - Signal of the run the error belongs to.
+     */
     reportAsyncError(err, signal) {
         if (signal.aborted) return;
         const reason = this.getErrorMessage(err);
@@ -620,6 +790,9 @@ class AutoQuestComplete {
         UI.showToast(`Quest "${this._activeQuestName}" failed: ${reason}`, { type: "error" });
     }
 
+    /**
+     * @returns {string|null} The id of a DM or voice channel for activity quests, or null if none exists.
+     */
     findActivityChannelId() {
         const privateChannelId = Webpack.Stores.ChannelStore?.getSortedPrivateChannels?.()?.[0]?.id;
         if (privateChannelId) return privateChannelId;
@@ -631,6 +804,9 @@ class AutoQuestComplete {
         return null;
     }
 
+    /**
+     * @returns {boolean} True if the active quest has an application id; otherwise an error is shown.
+     */
     hasApplicationId() {
         if (this._activeAppId) return true;
         Logger.error(`Could not resolve the application id for "${this._activeQuestName}".`);
@@ -638,6 +814,11 @@ class AutoQuestComplete {
         return false;
     }
 
+    /**
+     * Logs the progress and shows a toast at most once per interval.
+     * @param {number} progress - Seconds completed.
+     * @param {number} secondsNeeded - Seconds required.
+     */
     reportProgress(progress, secondsNeeded) {
         Logger.info(`Quest progress: ${progress}/${secondsNeeded}`);
         const now = Date.now();
@@ -646,6 +827,13 @@ class AutoQuestComplete {
         UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
     }
 
+    /**
+     * @param {Quest} quest
+     * @param {string} taskName
+     * @param {number} secondsNeeded
+     * @param {Function} onComplete - Called once the target is reached.
+     * @returns {Function} Flux handler for `QUESTS_SEND_HEARTBEAT_SUCCESS`.
+     */
     createHeartbeatHandler(quest, taskName, secondsNeeded, onComplete) {
         return data => {
             const status = data?.userStatus;
@@ -660,6 +848,11 @@ class AutoQuestComplete {
         };
     }
 
+    /**
+     * @param {object} dependencies - Result of `resolveDependencies()`.
+     * @param {string[]} names - Required entries.
+     * @returns {boolean} True if all are present; otherwise an error is shown.
+     */
     hasDependencies(dependencies, names) {
         const missing = names.filter(name => !dependencies[name]);
         if (!missing.length) return true;
@@ -668,6 +861,10 @@ class AutoQuestComplete {
         return false;
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {boolean} True if the quest is open, not accepted yet and allowed by the notification settings.
+     */
     isQuestNotifiable(quest) {
         return !quest.userStatus?.enrolledAt &&
             this.isQuestOpen(quest) &&
@@ -675,23 +872,29 @@ class AutoQuestComplete {
             (this.settings.notifyUnsupported || this.isQuestSupported(quest));
     }
 
+    /** Debounces store changes so several updates lead to one check for new quests. */
     scheduleNewQuestCheck() {
         this.clearTimer(this._notifyDebounce);
         this._notifyDebounce = this.setTimer(() => this.handleNewQuest(), NOTIFY_DEBOUNCE_MS);
     }
 
+    /** Notifies about quests that have not been announced yet. */
     handleNewQuest() {
         if (!this.settings.enableNotify) return;
         const freshQuests = this.getQuests().filter(x => !this._notifiedQuests.has(x.id) && this.isQuestNotifiable(x));
         if (freshQuests.length) this.showQuestNotification(freshQuests);
     }
 
+    /**
+     * @returns {object|undefined} Discord's router module, cached after the first lookup.
+     */
     getRouter() {
         this._router ??= Webpack.getByKeys("transitionTo", "replaceWith", "getHistory")
             ?? Webpack.getByKeys("transitionTo", "replaceWith", "getHistory", { searchExports: true });
         return this._router;
     }
 
+    /** Navigates to the quests page via the router, if it is not open already. */
     openQuests() {
         try {
             if (location.pathname.startsWith(QUESTS_PATH)) return;
@@ -714,6 +917,10 @@ class AutoQuestComplete {
         }
     }
 
+    /**
+     * Scrolls to the quest's tile and highlights it temporarily; the original styles are restored afterwards.
+     * @param {Quest} quest
+     */
     focusQuestContainer(quest) {
         const tileId = `quest-tile-${quest.id}`;
         let attempts = 0;
@@ -757,10 +964,19 @@ class AutoQuestComplete {
         this.setTimer(highlightTile, FOCUS_POLL_MS);
     }
 
+    /**
+     * @param {number} count
+     * @param {string} noun - Singular form; an `s` is appended for any count other than one.
+     * @returns {string} E.g. `1 quest` or `3 quests`.
+     */
     pluralize(count, noun) {
         return `${count} ${noun}${count === 1 ? "" : "s"}`;
     }
 
+    /**
+     * @param {Quest[]} quests
+     * @returns {React.ReactElement} The notification body for several quests: a short list plus a count of the rest.
+     */
     buildSummaryContent(quests) {
         const supported = quests.filter(x => this.isQuestSupported(x));
         const unsupportedCount = quests.length - supported.length;
@@ -782,6 +998,11 @@ class AutoQuestComplete {
         );
     }
 
+    /**
+     * @param {Quest[]} quests
+     * @param {boolean} reminder - Prefixes the title with "Reminder".
+     * @returns {{title: string, content: React.ReactElement, icon?: Function}}
+     */
     buildNotificationAppearance(quests, reminder) {
         const prefix = reminder ? "Reminder: " : "";
         if (quests.length === 1) {
@@ -797,6 +1018,10 @@ class AutoQuestComplete {
         };
     }
 
+    /**
+     * @param {Quest[]} quests
+     * @returns {{label: string, onClick: Function}[]} The "Go to Quests" and "Remind Me Later" actions.
+     */
     buildNotificationActions(quests) {
         const questIds = new Set(quests.map(x => x.id));
         return [
@@ -819,7 +1044,11 @@ class AutoQuestComplete {
         ];
     }
 
-    // Shows one combined notification; quests of a still visible notification are merged into the new one.
+    /**
+     * Shows one combined notification; quests of a still visible notification are merged into the new one.
+     * @param {Quest[]} quests
+     * @param {boolean} [reminder] - Marks the notification as a reminder.
+     */
     showQuestNotification(quests, reminder = false) {
         const visibleIds = this._notification?.isVisible?.() ? this._notificationQuestIds : null;
         const visibleQuests = visibleIds ? this.getQuests().filter(x => visibleIds.has(x.id) && this.isQuestNotifiable(x)) : [];
@@ -851,6 +1080,7 @@ class AutoQuestComplete {
         for (const quest of allQuests) this._notifiedQuests.add(quest.id);
     }
 
+    /** Starts the newly accepted quest unless it is already the active one. */
     handleQuestChange() {
         const quest = this.findEnrolledQuest();
 
@@ -861,6 +1091,10 @@ class AutoQuestComplete {
         }
     }
 
+    /**
+     * Picks the task handler of the quest and runs it; unexpected errors open the error modal.
+     * @param {Quest} quest
+     */
     runQuest(quest) {
         const lifecycleSignal = this._abortController?.signal;
         if (!lifecycleSignal || lifecycleSignal.aborted) return;
@@ -907,7 +1141,12 @@ class AutoQuestComplete {
         }
     }
 
-    // Patcher.instead returns null when a patch fails; in that case earlier patches are reverted and the run fails visibly.
+    /**
+     * Patcher.instead returns null when a patch fails; in that case earlier patches are reverted and the run fails visibly.
+     * @param {Array<[object, string, Function]>} targets - Module, function name and replacement.
+     * @returns {Function} Reverts all patches.
+     * @throws {Error} If a patch could not be applied.
+     */
     patchInstead(targets) {
         const unpatches = [];
         const unpatchAll = () => unpatches.forEach(unpatch => unpatch());
@@ -922,6 +1161,10 @@ class AutoQuestComplete {
         return unpatchAll;
     }
 
+    /**
+     * @param {object} [runningGameStore]
+     * @returns {number} A random process id that no running game uses.
+     */
     generateFakePid(runningGameStore) {
         const usedPids = new Set((runningGameStore?.getRunningGames?.() ?? []).map(game => game.pid));
         let pid;
@@ -931,10 +1174,18 @@ class AutoQuestComplete {
         return pid;
     }
 
+    /**
+     * @param {string} taskName
+     * @returns {((context: TaskContext) => void)|undefined} The handler method, or undefined for unknown tasks.
+     */
     getTaskHandler(taskName) {
         return this[TASK_HANDLERS[taskName]];
     }
 
+    /**
+     * Marks a quest without a supported task as unsupported and moves on to the next quest.
+     * @param {Quest} quest
+     */
     skipUnsupportedQuest(quest) {
         if (this._unsupportedQuests.has(quest.id)) return;
         this.markQuestUnsupported(quest);
@@ -943,6 +1194,10 @@ class AutoQuestComplete {
         this.setTimer(() => this.handleQuestChange(), SKIP_NEXT_QUEST_DELAY_MS);
     }
 
+    /**
+     * Handler for the video tasks: reports video progress until the target is reached.
+     * @param {TaskContext} context
+     */
     runWatchVideo({ quest, secondsNeeded, secondsDone, signal, lifecycleSignal, dependencies }) {
         const { api } = dependencies;
         const speed = WATCH_VIDEO_STEP_SECONDS;
@@ -976,6 +1231,10 @@ class AutoQuestComplete {
         UI.showToast(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / speed)} sec.`, { type: "info" });
     }
 
+    /**
+     * Handler for `PLAY_ON_DESKTOP`: spoofs a running game until Discord reports the target as reached.
+     * @param {TaskContext} context
+     */
     runPlayOnDesktop({ quest, taskName, secondsNeeded, secondsDone, signal, dependencies, pid }) {
         const { api, FluxDispatcher, RunningGameStore } = dependencies;
         if (!this.hasApplicationId()) return;
@@ -1020,6 +1279,10 @@ class AutoQuestComplete {
         }).catch(err => this.reportAsyncError(err, signal));
     }
 
+    /**
+     * Handler for `STREAM_ON_DESKTOP`: spoofs the stream metadata until Discord reports the target as reached.
+     * @param {TaskContext} context
+     */
     runStreamOnDesktop({ quest, taskName, secondsNeeded, secondsDone, dependencies, pid }) {
         const { FluxDispatcher, ApplicationStreamingStore } = dependencies;
         if (!this.hasApplicationId()) return;
@@ -1040,6 +1303,10 @@ class AutoQuestComplete {
         UI.showToast(`Spoofed stream to ${this._activeQuestName}. Stream ~${minutesLeft} min. (Need at least one VC peer)`, { type: "info" });
     }
 
+    /**
+     * Handler for `PLAY_ACTIVITY`: sends heartbeats for an activity channel until the target is reached.
+     * @param {TaskContext} context
+     */
     runPlayActivity({ quest, secondsNeeded, secondsDone, signal, lifecycleSignal, dependencies }) {
         const { api } = dependencies;
         const channelId = this.findActivityChannelId();
@@ -1075,6 +1342,10 @@ class AutoQuestComplete {
         })().catch(err => this.reportAsyncError(err, signal));
     }
 
+    /**
+     * Handler for `ACHIEVEMENT_IN_ACTIVITY`: the task is server-side, so the quest is marked unsupported and the user is asked to complete it manually.
+     * @param {TaskContext} context
+     */
     runAchievementInActivity({ quest, taskName }) {
         if (this._unsupportedQuests.has(quest.id)) return;
         this.markQuestUnsupported(quest);
@@ -1085,7 +1356,7 @@ class AutoQuestComplete {
                     const started = Date.now();
                     const check = () => {
                         if (!document.querySelector('[role="dialog"]') || Date.now() - started > DIALOG_CLOSE_TIMEOUT_MS) return resolve();
-                                                this.setTimer(check, DIALOG_POLL_MS);
+                        this.setTimer(check, DIALOG_POLL_MS);
                     };
                     check();
                 });
@@ -1096,11 +1367,19 @@ class AutoQuestComplete {
         this.setTimer(() => this.handleQuestChange(), UNSUPPORTED_NEXT_QUEST_DELAY_MS);
     }
 
+    /**
+     * @param {{body?: {message?: string}, message?: string}} err
+     * @returns {string} The most specific readable message of the error.
+     */
     getErrorMessage(err) {
         return err?.body?.message ?? err?.message ?? String(err ?? "Unknown error");
     }
 
-    // Removes local user paths so the report does not leak them.
+    /**
+     * Removes local user paths so the report does not leak them.
+     * @param {string} [stack]
+     * @returns {string} The sanitized stack trace, truncated to the report limit.
+     */
     sanitizeStack(stack) {
         return String(stack ?? "No stack trace available")
             .replace(/[A-Za-z]:\\Users\\[^\\\s)]+/g, "<user>")
@@ -1108,6 +1387,10 @@ class AutoQuestComplete {
             .slice(0, MAX_REPORT_STACK_LENGTH);
     }
 
+    /**
+     * Shows an error modal that offers a prefilled GitHub issue.
+     * @param {Error} err
+     */
     showErrorModal(err) {
         const questName = this._activeQuestName ?? "Unknown Quest";
         const message = this.getErrorMessage(err);
@@ -1126,13 +1409,21 @@ class AutoQuestComplete {
         });
     }
 
-    // @source links to the file on GitHub (see BD docs); the download uses the matching raw URL.
+    /**
+     * `@source` links to the file on GitHub (see BD docs); the download uses the matching raw URL.
+     * @returns {string|null} The raw file URL, or null if `@source` is not a GitHub file link.
+     */
     getRawSourceUrl() {
         const blob = this._sourceUrl.match(GITHUB_BLOB_PATTERN);
         if (blob) return `https://raw.githubusercontent.com/${blob[1]}/${blob[2]}/${blob[3]}`;
         return this._sourceUrl.startsWith(GITHUB_RAW_PREFIX) ? this._sourceUrl : null;
     }
 
+    /**
+     * Downloads the plugin file from the source repository.
+     * @returns {Promise<{fileContent: string, remoteMeta: object}>}
+     * @throws {Error} If there is no valid source, the request fails or times out.
+     */
     async fetchRemotePlugin() {
         const signal = AbortSignal.any([this._abortController.signal, AbortSignal.timeout(UPDATE_TIMEOUT_MS)]);
         const rawUrl = this.getRawSourceUrl();
@@ -1143,18 +1434,27 @@ class AutoQuestComplete {
         return { fileContent, remoteMeta: this.parseMeta(fileContent) };
     }
 
-    // The remote file must be this plugin and a newer, valid semver version before it is offered.
+    /**
+     * The remote file must be this plugin and a newer, valid semver version before it is offered.
+     * @param {object} remoteMeta - Parsed header of the remote file.
+     * @returns {boolean}
+     */
     isValidUpdate(remoteMeta) {
         return remoteMeta.name === this._config.info.name &&
             SEMVER_PATTERN.test(remoteMeta.version ?? "") &&
             Utils.semverCompare(this._version, remoteMeta.version) > 0;
     }
 
+    /** Checks for an update now and again after every interval. */
     scheduleUpdateChecks() {
         this.checkForUpdate();
         this.setTimer(() => this.scheduleUpdateChecks(), UPDATE_CHECK_INTERVAL_MS);
     }
 
+    /**
+     * Offers an update notification if the repository has a newer version. Failures are logged only.
+     * @returns {Promise<void>}
+     */
     async checkForUpdate() {
         if (!this._abortController) return;
         try {
@@ -1166,6 +1466,11 @@ class AutoQuestComplete {
         }
     }
 
+    /**
+     * Writes the new plugin file; BetterDiscord then reloads the plugin.
+     * @param {string} remoteFile - Content of the new plugin file.
+     * @returns {Promise<void>}
+     */
     async installUpdate(remoteFile) {
         const { name } = this._config.info;
         const target = require("path").join(BdApi.Plugins.folder, `${name}.plugin.js`);
@@ -1185,6 +1490,11 @@ class AutoQuestComplete {
         UI.showToast("AutoQuestComplete was updated and will reload automatically.", { type: "success" });
     }
 
+    /**
+     * Shows the update notification with "Update Now" and "Update Later".
+     * @param {object} remoteMeta - Parsed header of the remote file.
+     * @param {string} remoteFile - Content of the remote file.
+     */
     newUpdateNotify(remoteMeta, remoteFile) {
         Logger.info("A new update is available!");
 
@@ -1206,6 +1516,10 @@ class AutoQuestComplete {
         });
     }
 
+    /**
+     * @param {string} fileContent - Plugin source.
+     * @returns {Object<string, string>} The `@key value` pairs of the header comment.
+     */
     parseMeta(fileContent) {
         const meta = {};
         const header = fileContent.match(/^\s*\/\*\*[\s\S]*?\*\//)?.[0] ?? "";
