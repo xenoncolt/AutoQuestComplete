@@ -136,6 +136,8 @@ class AutoQuestComplete {
         this._remindersTime = new Map();
         this._timers = new Set();
         this._cleanups = new Set();
+        this._runCleanups = new Set();
+        this._runController = null;
         this._abortController = null;
         this.settings;
 
@@ -216,6 +218,7 @@ class AutoQuestComplete {
             clearTimeout(timeout);
         }
         this._timers.clear();
+        this.endRun();
         this.runCleanups();
         Patcher.unpatchAll(this._config.info.name);
         this._activeQuestId = null;
@@ -252,10 +255,10 @@ class AutoQuestComplete {
         });
     }
 
-    // Registers a cleanup that runs once, either on demand via the returned function or in stop().
-    addCleanup(cleanup) {
+    // Registers a cleanup that runs once, either on demand via the returned function or when its scope is flushed.
+    addCleanup(cleanup, scope = this._cleanups) {
         const run = () => {
-            if (!this._cleanups.delete(run)) return;
+            if (!scope.delete(run)) return;
             try {
                 cleanup();
             } catch (err) {
@@ -266,8 +269,21 @@ class AutoQuestComplete {
         return run;
     }
 
-    runCleanups() {
-        for (const run of [...this._cleanups]) run();
+    runCleanups(scope = this._cleanups) {
+        for (const run of [...scope]) run();
+    }
+
+    // Cancels the running quest (loops, spoofing hooks, subscribers) so only one run is active at a time.
+    endRun() {
+        this._runController?.abort();
+        this._runController = null;
+        this.runCleanups(this._runCleanups);
+    }
+
+    startRun() {
+        this.endRun();
+        this._runController = new AbortController();
+        return this._runController.signal;
     }
 
 
@@ -613,8 +629,9 @@ class AutoQuestComplete {
     }
 
     runQuest(quest) {
-        const signal = this._abortController?.signal;
-        if (!signal || signal.aborted) return;
+        const lifecycleSignal = this._abortController?.signal;
+        if (!lifecycleSignal || lifecycleSignal.aborted) return;
+        const signal = this.startRun();
         try {
             let ApplicationStreamingStore = Webpack.Stores.ApplicationStreamingStore;
             let FluxDispatcher = Webpack.getByKeys('dispatch', 'subscribe', 'register', { searchExports: true });
@@ -657,7 +674,7 @@ class AutoQuestComplete {
                 const speed = 7;
                 const enrolledAt = new Date(quest.userStatus.enrolledAt).getTime();
                 let isFinished = false;
-
+                let reachedEnd = false;
                 (async () => {
                     while (!signal.aborted) {
                         const remain = Math.min(speed, secondsNeeded - secondsDone);
@@ -672,10 +689,11 @@ class AutoQuestComplete {
 
 
                         if (timestamp >= secondsNeeded) {
+                            reachedEnd = true;
                             break;
                         }
                     }
-                    if (signal.aborted) return;
+                    if (!reachedEnd || lifecycleSignal.aborted) return;
                     if (!isFinished) {
                         await api.post({ url: `/quests/${quest.id}/video-progress`, body: { timestamp: secondsNeeded } });
                     }
@@ -720,7 +738,7 @@ class AutoQuestComplete {
                         unpatchGameForPid?.();
                         FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
                         FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
-                    });
+                    }, this._runCleanups);
 
                     let fn = data => {
                         let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.PLAY_ON_DESKTOP.value);
@@ -746,7 +764,7 @@ class AutoQuestComplete {
                 const stopSpoofing = this.addCleanup(() => {
                     unpatchStream?.();
                     FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
-                });
+                }, this._runCleanups);
                 let fn = data => {
                     let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.STREAM_ON_DESKTOP.value);
                     Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
@@ -768,6 +786,7 @@ class AutoQuestComplete {
                 (async () => {
                     Logger.info(this._config.info.name, "Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
                     UI.showToast(`Completing quest ${this._activeQuestName} - ${quest.config.messages.questName}`, { type: "info" });
+                    let reachedEnd = false;
                     while (!signal.aborted) {
                         const res = await api.post({ url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: false } });
                         if (signal.aborted) return;
@@ -775,13 +794,14 @@ class AutoQuestComplete {
                         Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
                         UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
                         await this.sleep(20000, signal);
-                        if (signal.aborted) return;
+                        if (lifecycleSignal.aborted || (signal.aborted && progress < secondsNeeded)) return;
                         if (progress >= secondsNeeded) {
                             await api.post({ url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: true } });
+                            reachedEnd = true;
                             break;
                         }
                     }
-                    if (signal.aborted) return;
+                    if (!reachedEnd || lifecycleSignal.aborted) return;
                     Logger.info(this._config.info.name, "Quest completed!");
                     UI.showToast("Quest completed!", { type: "success" });
                 })();
