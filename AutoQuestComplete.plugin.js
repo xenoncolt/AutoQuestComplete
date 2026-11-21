@@ -125,6 +125,8 @@ const NOTIFY_RETRY_MS = 300;
 const NOTIFY_MAX_RETRIES = 3;
 const MAX_LISTED_QUESTS = 5;
 const REWARD_SETTING_PREFIX = "reward_";
+const FAKE_PID_MIN = 1000;
+const FAKE_PID_RANGE = 30000;
 const MAX_REPORT_STACK_LENGTH = 1500;
 const UPDATE_TIMEOUT_MS = 15000;
 const UPDATE_NOTIFICATION_ID = "AutoQuestComplete-update";
@@ -842,11 +844,20 @@ class AutoQuestComplete {
                 signal,
                 lifecycleSignal,
                 dependencies,
-                pid: Math.floor(Math.random() * 30000) + 1000
+                pid: this.generateFakePid(dependencies.RunningGameStore)
             });
         } catch (err) {
             this.showErrorModal(err);
         }
+    }
+
+    generateFakePid(runningGameStore) {
+        const usedPids = new Set((runningGameStore?.getRunningGames?.() ?? []).map(game => game.pid));
+        let pid;
+        do {
+            pid = Math.floor(Math.random() * FAKE_PID_RANGE) + FAKE_PID_MIN;
+        } while (usedPids.has(pid));
+        return pid;
     }
 
     getTaskHandler(taskName) {
