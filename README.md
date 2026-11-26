@@ -23,6 +23,18 @@
 2. Save the file to your BetterDiscord plugins folder.
 3. Enable the plugin in BetterDiscord settings.
 
+## Requirements
+- [BetterDiscord](https://betterdiscord.app) **1.14.5** or newer. Older versions are rejected on start with an error message.
+
+## Updates
+This plugin is **not** listed on the official BetterDiscord store, because automating quest completion is against the store guidelines. It therefore updates itself from this repository:
+- On load and once every 24 hours it compares its version with the file in the `main` branch.
+- If a newer version exists, a notification offers **Update Now** or **Update Later**.
+- **Update Now** downloads the plugin file from this repository and replaces the installed one. Only install updates if you trust this repository.
+
+## Changelog
+The changes of the current version are shown once after an update. The full history is available in the [commit log](https://github.com/xenoncolt/AutoQuestComplete/commits/main).
+
 ## Usage
 1. Open the quest menu.
 2. Click on the quest you want to complete.

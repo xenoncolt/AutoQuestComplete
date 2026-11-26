@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+        "target": "ES2022",
+        "module": "commonjs",
+        "checkJs": false,
+        "allowJs": true,
+        "noEmit": true,
+        "types": ["@betterdiscord/types", "node"]
+    },
+    "include": ["AutoQuestComplete.plugin.js"],
+    "exclude": ["node_modules"]
+}

@@ -1,11 +1,12 @@
 /**
  * @name AutoQuestComplete
- * @description Automatically completes quests for you ... btw first u have to accept the quest manually...okay...
- * @version 0.10.0
- * @author @aamiaa published by Xenon Colt
- * @authorLink https://github.com/aamiaa
+ * @description Automatically completes quests for you. Requires BetterDiscord 1.14.5 or newer. WARNING: Discord prohibits automating quest completion; using this plugin may get your account flagged or banned. Use at your own risk. Based on a script by @aamiaa.
+ * @version 0.11.0
+ * @author Xenon Colt, Crytix
+ * @authorId 709210314230726776
+ * @authorLink https://github.com/xenoncolt
  * @website https://github.com/xenoncolt/AutoQuestComplete
- * @source https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js
+ * @source https://github.com/xenoncolt/AutoQuestComplete/blob/main/AutoQuestComplete.plugin.js
  * @invite vJRe78YmN8
  */
 
@@ -13,47 +14,51 @@ const config = {
     main: 'AutoQuestComplete.plugin.js',
     info: {
         name: 'AutoQuestComplete',
-        authorId: "709210314230726776",
-        website: "https://xenoncolt.dev",
-        version: "0.10.0",
-        description: "Automatically completes quests for you",
-        author: [
-            {
-                name: "@aamiaa",
-                plugin_author: "Xenon Colt",
-                github_username: "xenoncolt",
-            }
-        ],
-        github: "https://github.com/xenoncolt/AutoQuestComplete",
-        invite: "vJRe78YmN8",
-        github_raw: "https://raw.githubusercontent.com/xenoncolt/AutoQuestComplete/main/AutoQuestComplete.plugin.js"
+        github: "https://github.com/xenoncolt/AutoQuestComplete"
     },
     changelog: [
-        // {
-        //     title: "New Features & Improvements",
-        //     type: "added",
-        //     items: [
-        //         "Quest notifications now show the game icon, reward (with the Nitro orb bonus), task type & time, publisher, and how soon the quest expires - so you know what you're getting before opening it.",
-        //         "Quests now load in the background automatically, so you get notified without having to open the Quests page first."
-        //     ]
-        // }
         {
             title: "New Features & Improvements",
             type: "added",
             items: [
-                "The quests AutoQuestComplete can't complete, like \"launch the game\" achievement quests and PlayStation/Xbox quests, no longer trigger the new quest notification",
-                "New **Notify For Unsupported Quests** setting (off by default)",
-                "The **Unsupported Quest Task** popup is now saved on config, so it only shows once per quest instead of every time Discord starts",
+                "New quests are now announced in **one combined notification** (\"3 new quests available\") with the real count, a short list and the number of quests that must be completed manually",
+                "Requires **BetterDiscord 1.14.5** or newer",
+                "Quest progress toasts are limited to one per minute",
+                "The plugin checks the GitHub repository for a newer version on load and once a day, and lets you choose **Update Now** or **Update Later**; a toast confirms the installed update",
+                "The update source is read from the plugin's `@source` header, which now links to the file on GitHub",
+                "The update notification stays visible for one hour and is shown again with the next daily check",
                 "Thanks for the help griffinsectio and Thanks for creating issue TouhouJevil"
             ]
+        },
+        {
+            title: "Fixes & Stability",
+            type: "fixed",
+            items: [
+                "Disabling the plugin now removes all patches, listeners, timers and running quest loops",
+                "Fake game and stream patches use BetterDiscord's Patcher and are removed when a quest finishes or the plugin stops",
+                "The plugin no longer deletes `window.$` and no longer breaks when Discord modules cannot be found",
+                "Network and API errors are retried with backoff and shown as readable errors",
+                "Quests are tracked by their id, so two quests with the same name no longer interfere",
+                "Settings and stored data load safely; reward settings keep their saved values",
+                "\"Go to Quests\" opens the quests page reliably and restores the page's focus state afterwards",
+                "The error report no longer includes local user paths",
+                "If Discord's functions cannot be patched, the quest stops with an error message instead of silently running without spoofing",
+                "Critical startup errors are shown even when toasts are disabled in BetterDiscord",
+                "Log and toast messages for skipped and activity quests are accurate and no longer repeat the quest name",
+            ]
+        },
+        {
+            title: "Code Quality",
+            type: "improved",
+            items: [
+                "Quest handling is split into one handler per task type",
+                "Constants replace magic numbers, dead code was removed and ESLint reports no problems",
+                "Logging, data storage and patching use a plugin-scoped BetterDiscord API instance",
+                "Task labels and handlers are module constants, the quest task lookup is derived from the handler map, and unit tests cover the core helpers",
+                "Discord modules are looked up with the faster default-export search first, with the previous search as fallback",
+                "The README documents the minimum BetterDiscord version, self-updates and the risk of automating quests"
+            ]
         }
-        // {
-        //     title: "Change And Warnings",
-        //     type: "changed",
-        //     items: [
-        //         "Discord probably implement quest only for Playstation and Xbox. I am not sure how its gonna works. But for now this plugin will ignore this type of quest"
-        //     ]
-        // }
     ],
     settingsPanel: [
         {
@@ -79,35 +84,35 @@ const config = {
             settings: [
                 {
                     type: "switch",
-                    id: 4, // VIRTUAL_CURRENCY
+                    id: "reward_4", // VIRTUAL_CURRENCY
                     name: "Orbs",
                     note: "Notify for quests that reward Discord Orbs.",
                     value: true
                 },
                 {
                     type: "switch",
-                    id: 1, // REWARD_CODE
+                    id: "reward_1", // REWARD_CODE
                     name: "Redeemable Code",
                     note: "Notify for quests that reward a redeemable in-game code.",
                     value: true
                 },
                 {
                     type: "switch",
-                    id: 2, // IN_GAME
+                    id: "reward_2", // IN_GAME
                     name: "In-Game Reward",
                     note: "Notify for quests that reward an item directly in the promoted game.",
                     value: true
                 },
                 {
-                    type: "switch", 
-                    id: 3, // COLLECTIBLE
+                    type: "switch",
+                    id: "reward_3", // COLLECTIBLE
                     name: "Collectible",
                     note: "Notify for quests that reward a Discord collectible (e.g. an avatar decoration).",
                     value: true
                 },
                 {
                     type: "switch",
-                    id: 5, // FRACTIONAL_PREMIUM
+                    id: "reward_5", // FRACTIONAL_PREMIUM
                     name: "Nitro Trial",
                     note: "Notify for quests that reward a free Nitro (premium) trial.",
                     value: true
@@ -117,103 +122,337 @@ const config = {
     ]
 }
 
-const { Webpack, UI, Logger, Data, Utils, React } = BdApi;
+const PLUGIN_NAME = "AutoQuestComplete";
+const { Webpack, UI, Logger, Data, Utils, React, Patcher } = new BdApi(PLUGIN_NAME);
 
-
+const TASK_LABELS = {
+    WATCH_VIDEO: "Watch a video",
+    WATCH_VIDEO_ON_MOBILE: "Watch a video (mobile)",
+    PLAY_ON_DESKTOP: "Play the game",
+    STREAM_ON_DESKTOP: "Stream the game",
+    PLAY_ACTIVITY: "Play an activity",
+    ACHIEVEMENT_IN_ACTIVITY: "Earn an achievement",
+    PLAY_ON_PLAYSTATION: "Play on PlayStation",
+    PLAY_ON_XBOX: "Play on Xbox"
+};
+const TASK_HANDLERS = {
+    WATCH_VIDEO: "runWatchVideo",
+    WATCH_VIDEO_ON_MOBILE: "runWatchVideo",
+    PLAY_ON_DESKTOP: "runPlayOnDesktop",
+    STREAM_ON_DESKTOP: "runStreamOnDesktop",
+    PLAY_ACTIVITY: "runPlayActivity",
+    ACHIEVEMENT_IN_ACTIVITY: "runAchievementInActivity"
+};
 const SUPPORTED_TASKS = ["WATCH_VIDEO", "WATCH_VIDEO_ON_MOBILE", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY"];
+const API_MAX_RETRIES = 3;
+const API_BASE_BACKOFF_MS = 2000;
+const API_MAX_BACKOFF_MS = 30000;
+const HEARTBEAT_INTERVAL_MS = 20000;
+const HEARTBEAT_EXTRA_ATTEMPTS = 10;
+const HTTP_TOO_MANY_REQUESTS = 429;
+const HTTP_SERVER_ERROR = 500;
+const NOTIFICATION_ID = "AutoQuestComplete-new-quests";
+const NOTIFICATION_DURATION_MS = 5 * 60 * 1000;
+const REMINDER_DELAY_MS = 60 * 60 * 1000;
+const NOTIFY_DEBOUNCE_MS = 750;
+const NOTIFY_RETRY_MS = 300;
+const NOTIFY_MAX_RETRIES = 3;
+const MAX_LISTED_QUESTS = 5;
+const REWARD_SETTING_PREFIX = "reward_";
+const FAKE_PID_MIN = 1000;
+const FAKE_PID_RANGE = 30000;
+const QUESTS_PATH = "/quest-home";
+const MS_PER_SECOND = 1000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const MINUTES_PER_DAY = 24 * 60;
+const UNSUPPORTED_FALLBACK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const WATCH_VIDEO_STEP_SECONDS = 7;
+const FOCUS_POLL_MS = 250;
+const FOCUS_MAX_ATTEMPTS = 40;
+const HIGHLIGHT_DURATION_MS = 5000;
+const HIGHLIGHT_COLOR = "rgba(88, 101, 242, 0.95)";
+const HIGHLIGHT_GLOW_COLOR = "rgba(88, 101, 242, 0.2)";
+const SKIP_NEXT_QUEST_DELAY_MS = 1000;
+const UNSUPPORTED_NEXT_QUEST_DELAY_MS = 5000;
+const DIALOG_POLL_MS = 100;
+const DIALOG_CLOSE_TIMEOUT_MS = 3000;
+const PROGRESS_TOAST_INTERVAL_MS = 60000;
+const MAX_REPORT_STACK_LENGTH = 1500;
+const UPDATE_TIMEOUT_MS = 15000;
+const UPDATE_NOTIFICATION_ID = "AutoQuestComplete-update";
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const UPDATE_NOTIFICATION_DURATION_MS = 60 * 60 * 1000;
+const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
+const GITHUB_BLOB_PATTERN = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/;
+const GITHUB_RAW_PREFIX = "https://raw.githubusercontent.com/";
+const MIN_BETTERDISCORD_VERSION = "1.14.5";
 
+/**
+ * Discord quest object as provided by the QuestStore (only the fields used here).
+ * @typedef {object} Quest
+ * @property {string} id
+ * @property {object} [config] - Quest configuration: messages, assets, rewards, expiry and task definitions.
+ * @property {object} [userStatus] - Per-user state: enrollment, completion and task progress.
+ */
+
+/**
+ * Everything a task handler needs to complete one quest.
+ * @typedef {object} TaskContext
+ * @property {Quest} quest
+ * @property {string} taskName - Key of the quest task, e.g. `WATCH_VIDEO`.
+ * @property {number} secondsNeeded - Target of the task in seconds.
+ * @property {number} secondsDone - Progress already reported by Discord in seconds.
+ * @property {AbortSignal} signal - Aborted when this quest run ends.
+ * @property {AbortSignal} lifecycleSignal - Aborted when the plugin stops.
+ * @property {object} dependencies - Result of `resolveDependencies()`.
+ * @property {number} pid - Fake process id for game and stream spoofing.
+ */
+
+/**
+ * Auto-completes Discord quests that can be solved client-side.
+ * Everything created in `start()` is released in `stop()`.
+ */
 class AutoQuestComplete {
-    constructor() {
+    /**
+     * Only stores state; all side effects happen in `start()`.
+     * @param {{version?: string, source?: string}} [meta] - Plugin metadata supplied by BetterDiscord.
+     */
+    constructor(meta) {
+        this._version = meta?.version ?? "0.0.0";
+        this._sourceUrl = meta?.source ?? "";
         this._config = config;
-        this._questsStore = Webpack.Stores.QuestStore;
+        this._questsStore = null;
+        this._router = null;
         this._boundHandleQuestChange = this.handleQuestChange.bind(this);
-        this._boundNewQuestHandler = this.handleNewQuest.bind(this);
+        this._boundNewQuestHandler = this.scheduleNewQuestCheck.bind(this);
         this._activeQuestId = null;
+        this._activeAppId = null;
         this._activeQuestName = null;
         this._unsupportedQuests = new Set();
         this._storedUnsupportedQuests = {};
         this._notifiedQuests = new Set();
-        this._remindersTime = new Map();
-        this.settings;
+        this._notifyDebounce = null;
+        this._notification = null;
+        this._updateNotification = null;
+        this._notificationQuestIds = null;
+        this._notifyRetries = 0;
+        this._timers = new Set();
+        this._cleanups = new Set();
+        this._runCleanups = new Set();
+        this._runController = null;
+        this._lastProgressToast = 0;
+        this._abortController = null;
+        this.settings = null;
+    }
 
+    /** Shows the changelog modal once per installed version. */
+    showChangelogOnce() {
+        const version = this._version;
         try {
-            let currentVersionInfo = {};
-            try {
-                currentVersionInfo = Object.assign({}, { version: this._config.info.version, hasShownChangelog: false }, Data.load(this._config.info.name, "currentVersionInfo"));
-            } catch (err) {
-                currentVersionInfo = { version: this._config.info.version, hasShownChangelog: false };
-            }
-            if (this._config.info.version != currentVersionInfo.version) currentVersionInfo.hasShownChangelog = false;
-            currentVersionInfo.version = this._config.info.version;
-            Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
+            const stored = Data.load("currentVersionInfo");
+            const versionInfo = { hasShownChangelog: false, ...stored, version };
+            if (stored?.version !== version) versionInfo.hasShownChangelog = false;
 
-            this.checkForUpdate();
-
-            if (!currentVersionInfo.hasShownChangelog) {
+            if (!versionInfo.hasShownChangelog) {
                 UI.showChangelogModal({
                     title: "AutoQuestComplete Changelog",
-                    subtitle: this._config.info.version,
+                    subtitle: version,
                     changes: this._config.changelog
                 });
-                currentVersionInfo.hasShownChangelog = true;
-                Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
+                versionInfo.hasShownChangelog = true;
             }
-        }
-        catch (err) {
-            Logger.error(this._config.info.name, err);
+            Data.save("currentVersionInfo", versionInfo);
+        } catch (err) {
+            Logger.error("Could not show the changelog", err);
         }
     }
 
+    /**
+     * @returns {boolean} False only if BetterDiscord reports a semver version below the minimum.
+     */
+    isBetterDiscordSupported() {
+        const current = BdApi.version;
+        if (!SEMVER_PATTERN.test(current ?? "")) return true;
+        return Utils.semverCompare(MIN_BETTERDISCORD_VERSION, current) >= 0;
+    }
 
+    /**
+     * @param {Quest} quest
+     * @returns {boolean} True if the quest is neither completed nor expired.
+     */
+    isQuestOpen(quest) {
+        return !quest.userStatus?.completedAt && new Date(quest.config?.expiresAt).getTime() > Date.now();
+    }
 
+    /**
+     * @returns {Quest|undefined} The first accepted, open quest that is not marked unsupported.
+     */
+    findEnrolledQuest() {
+        return this.getQuests().find(x =>
+            !this._unsupportedQuests.has(x.id) &&
+            x.userStatus?.enrolledAt &&
+            this.isQuestOpen(x)
+        );
+    }
 
+    /** BetterDiscord lifecycle: loads data, subscribes to quest changes and starts the update checks. */
     start() {
-        const defaultSettings = this._flattenSettings().reduce((acc, setting) => {
-            acc[setting.id] = setting.value;
-            return acc;
-        }, {});
-        this.settings = Object.assign(defaultSettings, Data.load(this._config.info.name, "settings") || {});
+        if (!this.isBetterDiscordSupported()) {
+            Logger.error(`BetterDiscord ${MIN_BETTERDISCORD_VERSION} or newer is required.`);
+            UI.showToast(`AutoQuestComplete requires BetterDiscord ${MIN_BETTERDISCORD_VERSION} or newer.`, { type: "error", forceShow: true });
+            return;
+        }
+        this._abortController = new AbortController();
+        this.showChangelogOnce();
+        this.scheduleUpdateChecks();
+        this.loadSettings();
         this.loadUnsupportedQuests();
+        this._questsStore = Webpack.Stores.QuestStore;
         try {
-            if (this._questsStore && this._questsStore.addChangeListener) {
-                this._questsStore.addChangeListener(this._boundHandleQuestChange);
-                this._questsStore.addChangeListener(this._boundNewQuestHandler);
+            if (!this._questsStore?.quests || !this._questsStore.addChangeListener) {
+                Logger.error("QuestStore is unavailable, Discord may have changed.");
+                UI.showToast("AutoQuestComplete could not find the quest store.", { type: "error", forceShow: true });
+                return;
             }
+            this._questsStore.addChangeListener(this._boundHandleQuestChange);
+            this._questsStore.addChangeListener(this._boundNewQuestHandler);
 
-            const quest = [...this._questsStore.quests.values()].find(x =>
-                !this._unsupportedQuests.has(x.id) &&
-                x.userStatus?.enrolledAt &&
-                !x.userStatus?.completedAt &&
-                new Date(x.config.expiresAt).getTime() > Date.now()
-            );
-
-            if (this._questsStore && quest) {
-                this._activeQuestId = quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id;
-                this._activeQuestName = this.getQuestName(quest);
+            const quest = this.findEnrolledQuest();
+            if (quest) {
+                this.activateQuest(quest);
                 this.runQuest(quest);
             }
-        } catch (e) {
-            Logger.error(this._config.info.name, "Error while starting AutoQuestComplete", e);
-            UI.showToast("Error while starting AutoQuestComplete", {type:"error"});
+        } catch (err) {
+            Logger.error("Error while starting AutoQuestComplete", err);
+            UI.showToast("Error while starting AutoQuestComplete", { type: "error", forceShow: true });
         }
     }
 
+    /** BetterDiscord lifecycle: releases timers, notifications, listeners, patches and the running quest. */
     stop() {
+        this._abortController?.abort();
+        this._abortController = null;
         if (this._questsStore && this._questsStore.removeChangeListener) {
             this._questsStore.removeChangeListener(this._boundHandleQuestChange);
             this._questsStore.removeChangeListener(this._boundNewQuestHandler);
         }
-        for (const [questId, timeout] of this._remindersTime.entries()) {
+        for (const timeout of this._timers) {
             clearTimeout(timeout);
         }
-        this._unsupportedQuests.clear();
+        this._timers.clear();
+        this._notification?.close?.();
+        this._notification = null;
+        this._updateNotification?.close?.();
+        this._updateNotification = null;
+        this._notificationQuestIds = null;
+        this._notifyRetries = 0;
+        this.endRun();
+        this.runCleanups();
+        Patcher.unpatchAll();
+        this._activeQuestId = null;
+        this._activeQuestName = null;
+        this._activeAppId = null;
         this._notifiedQuests.clear();
-        this._remindersTime.clear();
     }
 
+    /**
+     * Cancels a timer created by `setTimer`.
+     * @param {number} timer
+     */
+    clearTimer(timer) {
+        clearTimeout(timer);
+        this._timers.delete(timer);
+    }
 
+    /**
+     * Starts a timer that is cancelled automatically in `stop()`.
+     * @param {Function} callback
+     * @param {number} delay - Delay in milliseconds.
+     * @returns {number} The timer id.
+     */
+    setTimer(callback, delay) {
+        const timer = setTimeout(() => {
+            this._timers.delete(timer);
+            callback();
+        }, delay);
+        this._timers.add(timer);
+        return timer;
+    }
 
+    /**
+     * Waits for the delay or until the signal aborts. Always resolves, never rejects.
+     * @param {number} delay - Delay in milliseconds.
+     * @param {AbortSignal} signal
+     * @returns {Promise<void>}
+     */
+    sleep(delay, signal) {
+        return new Promise(resolve => {
+            if (signal.aborted) {
+                resolve();
+                return;
+            }
+            const onAbort = () => {
+                clearTimeout(timer);
+                resolve();
+            };
+            const timer = setTimeout(() => {
+                signal.removeEventListener("abort", onAbort);
+                resolve();
+            }, delay);
+            signal.addEventListener("abort", onAbort, { once: true });
+        });
+    }
 
+    /**
+     * Registers a cleanup that runs once, either on demand via the returned function or when its scope is flushed.
+     * @param {Function} cleanup
+     * @param {Set<Function>} [scope] - Defaults to the plugin-wide cleanups.
+     * @returns {Function} Runs the cleanup immediately, if it has not run yet.
+     */
+    addCleanup(cleanup, scope = this._cleanups) {
+        const run = () => {
+            if (!scope.delete(run)) return;
+            try {
+                cleanup();
+            } catch (err) {
+                Logger.error("Cleanup failed", err);
+            }
+        };
+        scope.add(run);
+        return run;
+    }
+
+    /**
+     * Runs every cleanup registered in the scope.
+     * @param {Set<Function>} [scope] - Defaults to the plugin-wide cleanups.
+     */
+    runCleanups(scope = this._cleanups) {
+        for (const run of [...scope]) run();
+    }
+
+    /** Cancels the running quest (loops, spoofing hooks, subscribers) so only one run is active at a time. */
+    endRun() {
+        this._runController?.abort();
+        this._runController = null;
+        this.runCleanups(this._runCleanups);
+    }
+
+    /**
+     * Ends the previous run and begins a new one.
+     * @returns {AbortSignal} Aborted when this run ends.
+     */
+    startRun() {
+        this.endRun();
+        this._runController = new AbortController();
+        this._lastProgressToast = 0;
+        return this._runController.signal;
+    }
+
+    /**
+     * @param {object[]} [settings] - Settings panel definition, defaults to the plugin's own.
+     * @returns {object[]} All settings with categories resolved recursively.
+     */
     _flattenSettings(settings = this._config.settingsPanel) {
         return settings.flatMap(setting =>
             setting.type === "category" && Array.isArray(setting.settings)
@@ -222,33 +461,67 @@ class AutoQuestComplete {
         );
     }
 
-    getSettingsPanel() {
-        for (const setting of this._flattenSettings()) {
-            setting.value = this.settings[setting.id];
+    /** Merges the stored settings over the defaults, including the legacy reward keys. */
+    loadSettings() {
+        const defaults = Object.fromEntries(this._flattenSettings().map(setting => [setting.id, setting.value]));
+        let stored = null;
+        try {
+            stored = Data.load("settings");
+        } catch (err) {
+            Logger.error("Failed to load settings, using defaults", err);
         }
+        const saved = stored && typeof stored === "object" ? stored : {};
+        for (const id of Object.keys(defaults)) {
+            const legacyKey = id.replace(REWARD_SETTING_PREFIX, "");
+            if (id.startsWith(REWARD_SETTING_PREFIX) && !(id in saved) && legacyKey in saved) saved[id] = saved[legacyKey];
+        }
+        this.settings = Object.assign(defaults, saved);
+    }
+
+    /**
+     * @param {object[]} settings - Settings panel definition.
+     * @returns {object[]} A copy whose values are the current settings.
+     */
+    withCurrentValues(settings) {
+        return settings.map(setting => setting.type === "category" && Array.isArray(setting.settings)
+            ? { ...setting, settings: this.withCurrentValues(setting.settings) }
+            : { ...setting, value: this.settings[setting.id] ?? setting.value });
+    }
+
+    /**
+     * BetterDiscord settings panel hook.
+     * @returns {HTMLElement|React.ReactNode} The settings panel.
+     */
+    getSettingsPanel() {
+        if (!this.settings) this.loadSettings();
 
         return UI.buildSettingsPanel({
-            settings: this._config.settingsPanel,
+            settings: this.withCurrentValues(this._config.settingsPanel),
             onChange: (category, id, value) => {
                 this.settings[id] = value;
-                Data.save(this._config.info.name, "settings", this.settings);
+                try {
+                    Data.save("settings", this.settings);
+                } catch (err) {
+                    Logger.error("Failed to save settings", err);
+                }
             }
         });
     }
 
-
+    /** Loads the stored unsupported quests and drops entries that have expired. */
     loadUnsupportedQuests() {
-        let stored = {};
+        let stored = null;
         try {
-            stored = Data.load(this._config.info.name, "unsupportedQuests") || {};
+            stored = Data.load("unsupportedQuests");
         } catch (err) {
-            stored = {};
+            Logger.error("Failed to load unsupported quests", err);
         }
+        stored ??= {};
 
         const now = Date.now();
         this._storedUnsupportedQuests = {};
         for (const [questId, expiresAt] of Object.entries(stored)) {
-            if (typeof expiresAt !== "number" || expiresAt <= now) continue; 
+            if (typeof expiresAt !== "number" || expiresAt <= now) continue;
             this._storedUnsupportedQuests[questId] = expiresAt;
             this._unsupportedQuests.add(questId);
         }
@@ -256,22 +529,30 @@ class AutoQuestComplete {
         this.saveUnsupportedQuests();
     }
 
+    /**
+     * Remembers the quest as unsupported until it expires.
+     * @param {Quest} quest
+     */
     markQuestUnsupported(quest) {
         this._unsupportedQuests.add(quest.id);
-        const expires_at = new Date(quest?.config?.expiresAt).getTime();
-        this._storedUnsupportedQuests[quest.id] = Number.isFinite(expires_at) ? expires_at : Date.now() + 7 * 24 * 60 * 60 * 1000;
+        const expiresAt = new Date(quest?.config?.expiresAt).getTime();
+        this._storedUnsupportedQuests[quest.id] = Number.isFinite(expiresAt) ? expiresAt : Date.now() + UNSUPPORTED_FALLBACK_TTL_MS;
         this.saveUnsupportedQuests();
     }
 
+    /** Persists the unsupported quests; failures are logged. */
     saveUnsupportedQuests() {
         try {
-            Data.save(this._config.info.name, "unsupportedQuests", this._storedUnsupportedQuests);
+            Data.save("unsupportedQuests", this._storedUnsupportedQuests);
         } catch (err) {
-            Logger.error(this._config.info.name, "Failed to save unsupported quests", err);
+            Logger.error("Failed to save unsupported quests", err);
         }
     }
 
-
+    /**
+     * @param {Quest} quest
+     * @returns {string|null} The application id of the first task, or of the quest itself.
+     */
     getQuestApplicationId(quest) {
         const tasks = quest?.config?.taskConfigV2?.tasks ?? {};
         for (const task of Object.values(tasks)) {
@@ -281,31 +562,69 @@ class AutoQuestComplete {
         return quest?.config?.application?.id ?? null;
     }
 
-    
+    /**
+     * @param {Quest} quest
+     * @returns {string|null} The quest's own application id, falling back to the task's.
+     */
+    resolveApplicationId(quest) {
+        return quest?.config?.application?.id ?? this.getQuestApplicationId(quest);
+    }
+
+    /**
+     * Makes the quest the active one.
+     * @param {Quest} quest
+     */
+    activateQuest(quest) {
+        this._activeQuestId = quest.id;
+        this._activeAppId = this.resolveApplicationId(quest);
+        this._activeQuestName = this.getQuestName(quest);
+    }
+
+    /**
+     * @param {Quest} quest
+     * @returns {string} The quest or game title.
+     */
     getQuestName(quest) {
         return quest?.config?.messages?.questName ?? quest?.config?.messages?.gameTitle ?? "Unknown Quest";
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {object[]} The quest's rewards.
+     */
     getQuestRewards(quest) {
         return quest?.config?.rewardsConfig?.rewards ?? [];
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {boolean} True if the quest has a task this plugin can complete.
+     */
     isQuestSupported(quest) {
         const tasks = quest?.config?.taskConfigV2?.tasks ?? {};
         return SUPPORTED_TASKS.some(x => tasks[x] != null);
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {boolean} True if any reward of the quest is enabled in the settings.
+     */
     shouldNotifyForQuest(quest) {
         const rewards = this.getQuestRewards(quest);
         if (!rewards.length) return true;
-        return rewards.some(reward => this.settings[reward?.type] !== false);
+        return rewards.some(reward => this.settings[`${REWARD_SETTING_PREFIX}${reward?.type}`] !== false);
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {string|null} The rewards as readable text, or null if there are none.
+     */
     getRewardText(quest) {
         const parts = this.getQuestRewards(quest).map(reward => {
             if (typeof reward?.orbQuantity === "number" && reward.orbQuantity > 0) {
-                return reward.premiumOrbQuantity && reward.premiumOrbQuantity !== reward.orbQuantity 
-                ? `${reward.orbQuantity} Orbs (${reward.premiumOrbQuantity} with Nitro)` : `${reward.orbQuantity} Orbs`;
+                return reward.premiumOrbQuantity && reward.premiumOrbQuantity !== reward.orbQuantity
+                    ? `${reward.orbQuantity} Orbs (${reward.premiumOrbQuantity} with Nitro)`
+                    : `${reward.orbQuantity} Orbs`;
             }
             return reward?.messages?.name;
         }).filter(Boolean);
@@ -313,71 +632,96 @@ class AutoQuestComplete {
         return parts.length ? parts.join(", ") : null;
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {string|null} The task label with its approximate duration, or null if the task is unknown.
+     */
     getQuestTaskInfo(quest) {
         const tasks = quest?.config?.taskConfigV2?.tasks ?? {};
-        const labels = {
-            WATCH_VIDEO: "Watch a video",
-            WATCH_VIDEO_ON_MOBILE: "Watch a video (mobile)",
-            PLAY_ON_DESKTOP: "Play the game",
-            STREAM_ON_DESKTOP: "Stream the game",
-            PLAY_ACTIVITY: "Play an activity",
-            ACHIEVEMENT_IN_ACTIVITY: "Earn an achievement",
-            PLAY_ON_PLAYSTATION: "Play on PlayStation",
-            PLAY_ON_XBOX: "Play on Xbox"
-        };
-        const taskName = Object.keys(labels).find(x => tasks[x] != null);
+        const taskName = Object.keys(TASK_LABELS).find(x => tasks[x] != null);
         if (!taskName) return null;
         const seconds = tasks[taskName]?.target ?? 0;
-        if (!seconds) return labels[taskName];
-        const duration = seconds >= 60 ? `${Math.round(seconds / 60)} min` : `${seconds} sec`;
-        return `${labels[taskName]} (~${duration})`;
+        if (!seconds) return TASK_LABELS[taskName];
+        const duration = seconds >= SECONDS_PER_MINUTE ? `${Math.round(seconds / SECONDS_PER_MINUTE)} min` : `${seconds} sec`;
+        return `${TASK_LABELS[taskName]} (~${duration})`;
     }
 
+    /**
+     * @param {string} dateStr - Date the time is measured to.
+     * @returns {string|null} The remaining time as `1d 2h`, `3h 4m` or `5m`, or null if the date is past or invalid.
+     */
     formatRelativeTime(dateStr) {
         const ms = new Date(dateStr).getTime() - Date.now();
         if (!Number.isFinite(ms) || ms <= 0) return null;
-        const minutes = Math.floor(ms / 60000);
-        const days = Math.floor(minutes / 1440);
-        const hours = Math.floor((minutes % 1440) / 60);
+        const minutes = Math.floor(ms / (SECONDS_PER_MINUTE * MS_PER_SECOND));
+        const days = Math.floor(minutes / MINUTES_PER_DAY);
+        const hours = Math.floor((minutes % MINUTES_PER_DAY) / MINUTES_PER_HOUR);
         if (days > 0) return `${days}d ${hours}h`;
-        if (hours > 0) return `${hours}h ${minutes % 60}m`;
+        if (hours > 0) return `${hours}h ${minutes % MINUTES_PER_HOUR}m`;
         return `${minutes}m`;
     }
 
-    getQuestIconUrl(quest) {
+    /**
+     * @param {Quest} quest
+     * @returns {string[]} CDN URLs of the quest's tile image, best match first (plain path, then themed paths of the current and the other theme).
+     */
+    getQuestIconUrls(quest) {
         const assets = quest?.config?.assets ?? {};
-        const file = assets.gameTileLight || assets.gameTileDark || assets.logotypeLight;
-        if (!file) return null;
-        return `https://cdn.discordapp.com/${file}`;
+        const light = document.documentElement.classList.contains("theme-light");
+        const suffixes = light ? ["Light", "Dark"] : ["Dark", "Light"];
+        // Discord fills gameTile/logotype with "PLACEHOLDER"; the real paths ("quests/<id>/<file>") are in the themed fields.
+        const keys = [...suffixes.map(s => `gameTile${s}`), ...suffixes.map(s => `logotype${s}`), "gameTile", "logotype"];
+        const urls = [];
+        for (const key of keys) {
+            const file = assets[key];
+            if (!file || file === "PLACEHOLDER") continue;
+            const url = `https://cdn.discordapp.com/${file.startsWith("quests/") ? file : `quests/${quest.id}/${file}`}`;
+            if (!urls.includes(url)) urls.push(url);
+        }
+        return urls;
     }
 
-    buildQuestIcon(quest) {
-        const url = this.getQuestIconUrl(quest);
-        if (!url || !React) return undefined;
-        return () => React.createElement("img", {
-            src: url,
-            width: 36,
-            height: 36,
-            style: { borderRadius: "8px", objectFit: "cover" },
-            onError: (event) => { event.currentTarget.style.display = "none"; }
-        });
+    /**
+     * @param {Quest} quest
+     * @returns {React.ReactElement} The quest image on the left, the name and the reward below each other on the right.
+     */
+    buildQuestHeader(quest) {
+        const e = React.createElement;
+        const urls = this.getQuestIconUrls(quest);
+const reward = this.getRewardText(quest);
+
+return e("div", { key: quest.id, style: { display: "flex", alignItems: "center", gap: "10px" } },
+            urls.length ? e("img", {
+                src: urls[0],
+                width: 40,
+                height: 40,
+                style: { borderRadius: "8px", objectFit: "cover", flexShrink: 0 },
+                onError: (event) => {
+                    const img = event.currentTarget;
+                    const next = Number(img.dataset.urlIndex ?? 0) + 1;
+                    if (next < urls.length) {
+                        img.dataset.urlIndex = String(next);
+                        img.src = urls[next];
+                    } else {
+                        img.style.display = "none";
+                    }
+                }
+            }) : null,
+            e("div", { style: { display: "flex", flexDirection: "column", minWidth: 0 } },
+                e("strong", null, this.getQuestName(quest)),
+                reward ? e("span", { style: { opacity: 0.9 } }, reward) : null
+            )        );
     }
 
+    /**
+     * @param {Quest} quest
+     * @returns {React.ReactElement} The notification body for a single quest.
+     */
     buildNotificationContent(quest) {
         const intro = this.isQuestSupported(quest) ? `Accept "${this.getQuestName(quest)}" to start auto-completing.` : `"${this.getQuestName(quest)}" has to be completed manually, AutoQuestComplete can't do this quest type for you.`;
-        const reward = this.getRewardText(quest);
         const task = this.getQuestTaskInfo(quest);
         const publisher = quest?.config?.messages?.gamePublisher;
         const expiresIn = this.formatRelativeTime(quest?.config?.expiresAt);
-
-        if (!React) {
-            return [intro,
-                reward && `Reward: ${reward}`,
-                task && `Task: ${task}`,
-                publisher && `Publisher: ${publisher}`,
-                expiresIn && `Expires in ${expiresIn}`
-            ].filter(Boolean).join(" • ");
-        }
 
         const e = React.createElement;
         const row = (label, value) => value
@@ -386,441 +730,820 @@ class AutoQuestComplete {
             : null;
 
         return e("div", { style: { display: "flex", flexDirection: "column", gap: "3px" } },
-            e("div", { style: { marginBottom: "2px" } }, intro),
-            row("Reward", reward),
+            this.buildQuestHeader(quest),
+            e("div", { style: { margin: "4px 0 2px" } }, intro),
             row("Task", task),
             row("Publisher", publisher),
             row("Expires in", expiresIn)
         );
     }
 
+    /**
+     * @returns {Quest[]} All quests currently known to the QuestStore.
+     */
+    getQuests() {
+        return [...(this._questsStore?.quests?.values() ?? [])];
+    }
+
+    /**
+     * Looks up the Discord modules needed for a run. Missing modules are `undefined`; see `hasDependencies`.
+     * @returns {{api: object, FluxDispatcher: object, ApplicationStreamingStore: object, RunningGameStore: object}}
+     */
+    resolveDependencies() {
+        return {
+            // Other modules also expose get/post but take a URL string instead of `{url, body}`.
+            api: Webpack.getModule(m => typeof m?.Bo?.get === "function" && typeof m.Bo.post === "function")?.Bo
+                ?? Webpack.getByKeys("get", "post", "put", "patch", "del", { searchExports: true }),
+            FluxDispatcher: Webpack.getByKeys("dispatch", "subscribe", "register")
+                ?? Webpack.getByKeys("dispatch", "subscribe", "register", { searchExports: true }),
+            ApplicationStreamingStore: Webpack.Stores.ApplicationStreamingStore,
+            RunningGameStore: Webpack.Stores.RunningGameStore
+        };
+    }
+
+    /**
+     * @param {{status?: number}} err
+     * @returns {boolean} True for network failures, rate limits and server errors.
+     */
+    isRetryableError(err) {
+        const status = err?.status;
+        return status === undefined || status === HTTP_TOO_MANY_REQUESTS || status >= HTTP_SERVER_ERROR;
+    }
+
+    /**
+     * @param {{body?: {retry_after?: number}}} err
+     * @param {number} attempt - Zero-based retry attempt.
+     * @returns {number} The delay in milliseconds: `retry_after` if given, otherwise exponential, capped.
+     */
+    getBackoffDelay(err, attempt) {
+        const retryAfterSeconds = Number(err?.body?.retry_after);
+        const delay = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+            ? retryAfterSeconds * MS_PER_SECOND
+            : API_BASE_BACKOFF_MS * 2 ** attempt;
+        return Math.min(delay, API_MAX_BACKOFF_MS);
+    }
+
+    /**
+     * Retries rate limits, server errors and network failures with backoff; other errors are thrown immediately.
+     * @param {object} api - Discord HTTP module.
+     * @param {string} method - Method name on the module, e.g. `post`.
+     * @param {{url: string, body?: object}} options
+     * @param {AbortSignal} signal - Stops retrying once aborted.
+     * @returns {Promise<object>} The API response.
+     */
+    async request(api, method, options, signal) {
+        for (let attempt = 0; ; attempt++) {
+            try {
+                return await api[method](options);
+            } catch (err) {
+                if (signal.aborted || attempt >= API_MAX_RETRIES || !this.isRetryableError(err)) throw err;
+                Logger.warn(`Request ${method.toUpperCase()} ${options.url} failed (${err?.status ?? "network"}), retrying.`);
+                await this.sleep(this.getBackoffDelay(err, attempt), signal);
+                if (signal.aborted) throw err;
+            }
+        }
+    }
+
+    /**
+     * Logs and shows an error from an async quest loop, unless the run was cancelled.
+     * @param {Error} err
+     * @param {AbortSignal} signal - Signal of the run the error belongs to.
+     */
+    reportAsyncError(err, signal) {
+        if (signal.aborted) return;
+        const reason = this.getErrorMessage(err);
+        Logger.error(`Quest "${this._activeQuestName}" failed`, err);
+        UI.showToast(`Quest "${this._activeQuestName}" failed: ${reason}`, { type: "error" });
+    }
+
+    /**
+     * @returns {string|null} The id of a DM or voice channel for activity quests, or null if none exists.
+     */
+    findActivityChannelId() {
+        const privateChannelId = Webpack.Stores.ChannelStore?.getSortedPrivateChannels?.()?.[0]?.id;
+        if (privateChannelId) return privateChannelId;
+        const guilds = Webpack.Stores.GuildChannelStore?.getAllGuilds?.() ?? {};
+        for (const guild of Object.values(guilds)) {
+            const voiceChannelId = guild?.VOCAL?.[0]?.channel?.id;
+            if (voiceChannelId) return voiceChannelId;
+        }
+        return null;
+    }
+
+    /**
+     * @returns {boolean} True if the active quest has an application id; otherwise an error is shown.
+     */
+    hasApplicationId() {
+        if (this._activeAppId) return true;
+        Logger.error(`Could not resolve the application id for "${this._activeQuestName}".`);
+        UI.showToast(`Could not resolve the application id for "${this._activeQuestName}".`, { type: "error" });
+        return false;
+    }
+
+    /**
+     * Logs the progress and shows a toast at most once per interval.
+     * @param {number} progress - Seconds completed.
+     * @param {number} secondsNeeded - Seconds required.
+     */
+    reportProgress(progress, secondsNeeded) {
+        Logger.info(`Quest progress: ${progress}/${secondsNeeded}`);
+        const now = Date.now();
+        if (now - this._lastProgressToast < PROGRESS_TOAST_INTERVAL_MS) return;
+        this._lastProgressToast = now;
+        UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
+    }
+
+    /**
+     * @param {Quest} quest
+     * @param {string} taskName
+     * @param {number} secondsNeeded
+     * @param {Function} onComplete - Called once the target is reached.
+     * @returns {Function} Flux handler for `QUESTS_SEND_HEARTBEAT_SUCCESS`.
+     */
+    createHeartbeatHandler(quest, taskName, secondsNeeded, onComplete) {
+        return data => {
+            const status = data?.userStatus;
+            if (!status || (status.questId && status.questId !== quest.id)) return;
+            const progress = quest.config.configVersion === 1 ? status.streamProgressSeconds : Math.floor(status.progress?.[taskName]?.value);
+            if (!Number.isFinite(progress)) return;
+            this.reportProgress(progress, secondsNeeded);
+            if (progress < secondsNeeded) return;
+            Logger.info("Quest completed!");
+            UI.showToast("Quest completed!", { type: "success" });
+            onComplete();
+        };
+    }
+
+    /**
+     * @param {object} dependencies - Result of `resolveDependencies()`.
+     * @param {string[]} names - Required entries.
+     * @returns {boolean} True if all are present; otherwise an error is shown.
+     */
+    hasDependencies(dependencies, names) {
+        const missing = names.filter(name => !dependencies[name]);
+        if (!missing.length) return true;
+        Logger.error(`Missing Discord modules: ${missing.join(", ")}`);
+        UI.showToast(`Could not find required Discord modules (${missing.join(", ")}). Discord may have changed.`, { type: "error", forceShow: true });
+        return false;
+    }
+
+    /**
+     * @param {Quest} quest
+     * @returns {boolean} True if the quest is open, not accepted yet and allowed by the notification settings.
+     */
+    isQuestNotifiable(quest) {
+        return !quest.userStatus?.enrolledAt &&
+            this.isQuestOpen(quest) &&
+            this.shouldNotifyForQuest(quest) &&
+            (this.settings.notifyUnsupported || this.isQuestSupported(quest));
+    }
+
+    /** Debounces store changes so several updates lead to one check for new quests. */
+    scheduleNewQuestCheck() {
+        this.clearTimer(this._notifyDebounce);
+        this._notifyDebounce = this.setTimer(() => this.handleNewQuest(), NOTIFY_DEBOUNCE_MS);
+    }
+
+    /** Notifies about quests that have not been announced yet. */
     handleNewQuest() {
-        const quest = [...this._questsStore.quests.values()].find(x =>
-            x.userStatus?.enrolledAt &&
-            !x.userStatus?.completedAt &&
-            new Date(x.config.expiresAt).getTime() > Date.now()
-        );
-
-        const new_quest = [...this._questsStore.quests.values()].find(x =>
-            !x.userStatus?.enrolledAt &&
-            !x.userStatus?.completedAt &&
-            new Date(x.config.expiresAt).getTime() > Date.now()
-        );
-
-        if (new_quest && new_quest !== quest && this.settings.enableNotify && !this._notifiedQuests.has(new_quest.config.application?.id ?? this.getQuestApplicationId(new_quest) ?? new_quest.id)) {
-            if (!this.shouldNotifyForQuest(new_quest)) return;
-            if (!this.settings.notifyUnsupported && !this.isQuestSupported(new_quest)) {
-                Logger.info(this._config.info.name, `Skipping notification for "${this.getQuestName(new_quest)}", coz its task can't be completed by the plugin.`);
-                return;
-            }
-            // UI.showNotice("New quest available! Please accept it to start auto completing.", {
-            //     type: "info",
-            //     timeout: 5 * 60 * 1000,
-            //     buttons: [
-            //         {
-            //             label: "Go to Quests",
-            //             onClick: () => {
-            //                 open(`/quests/${new_quest.id}`);
-            //             }
-            //         }
-            //     ]
-            // });
-            this._notifiedQuests.add(new_quest.config.application?.id ?? this.getQuestApplicationId(new_quest) ?? new_quest.id);
-            this.showQuestNotification(new_quest);
-        }
+        if (!this.settings.enableNotify) return;
+        const freshQuests = this.getQuests().filter(x => !this._notifiedQuests.has(x.id) && this.isQuestNotifiable(x));
+        if (freshQuests.length) this.showQuestNotification(freshQuests);
     }
 
+    /**
+     * @returns {object|undefined} Discord's router module, cached after the first lookup.
+     */
+    getRouter() {
+        this._router ??= Webpack.getByKeys("transitionTo", "replaceWith", "getHistory")
+            ?? Webpack.getByKeys("transitionTo", "replaceWith", "getHistory", { searchExports: true });
+        return this._router;
+    }
 
-    async openQuests() {
+    /** Navigates to the quests page via the router, if it is not open already. */
+    openQuests() {
         try {
-            const quest_link = document.querySelector('a[href="/quest-home"]');
+            if (location.pathname.startsWith(QUESTS_PATH)) return;
 
-            if (quest_link) {
-                quest_link.click();
-                await new Promise(r => setTimeout(r, 300));
-                if (location.pathname.startsWith("/quest")) return;
-            }
-
-            const Router = Webpack.getModule(m => m?.transitionTo && m?.replaceWith && m?.getHistory, { searchExports: true });
-            if (Router?.transitionTo) {
-                Router.transitionTo("/quest-home");
+            const router = this.getRouter();
+            if (router?.transitionTo) {
+                router.transitionTo(QUESTS_PATH);
                 return;
             }
 
-            window.history.pushState({}, "", "/quest-home");
-            window.dispatchEvent(new PopStateEvent("popstate"));
-
+            const questLink = document.querySelector(`a[href="${QUESTS_PATH}"]`);
+            if (questLink) {
+                questLink.click();
+                return;
+            }
+            Logger.warn("No way found to open the quests page.");
+            UI.showToast("Could not open the quests page.", { type: "error" });
         } catch (err) {
-            Logger.error(this._config.info.name, "Failed to open quests page", err);
+            Logger.error("Failed to open quests page", err);
         }
     }
 
-
+    /**
+     * Scrolls to the quest's tile and highlights it temporarily; the original styles are restored afterwards.
+     * @param {Quest} quest
+     */
     focusQuestContainer(quest) {
-        const quest_title_id = `quest-tile-${quest.id}`;
+        const tileId = `quest-tile-${quest.id}`;
         let attempts = 0;
 
-        const highlight_container = () => {
-            const quest_container = document.getElementById(quest_title_id);
+        const highlightTile = () => {
+            const tile = document.getElementById(tileId);
 
-            if (!quest_container) {
-                if (attempts++ < 40) {
-                    setTimeout(highlight_container, 250);
+            if (!tile) {
+                if (attempts++ < FOCUS_MAX_ATTEMPTS) {
+                    this.setTimer(highlightTile, FOCUS_POLL_MS);
                 } else {
-                    Logger.warn(this._config.info.name, `Gave up waiting for ${quest_title_id} to render.`);
+                    Logger.warn(`Gave up waiting for ${tileId} to render.`);
                 }
                 return;
             }
 
-            quest_container.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-            quest_container.setAttribute("tabindex", "-1");
-            quest_container.focus({ preventScroll: true });
+            tile.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+            const originalTabindex = tile.getAttribute("tabindex");
+            tile.setAttribute("tabindex", "-1");
+            tile.focus({ preventScroll: true });
 
-            const originalOutline = quest_container.style.outline;
-            const originalOutlineOffset = quest_container.style.outlineOffset;
-            const originalBoxShadow = quest_container.style.boxShadow;
-            const originalTransition = quest_container.style.transition;
+            const { outline, outlineOffset, boxShadow, transition } = tile.style;
 
-            quest_container.style.transition = "box-shadow 180ms ease, outline 180ms ease";
-            quest_container.style.outline = "3px solid rgba(88, 101, 242, 0.95)";
-            quest_container.style.outlineOffset = "6px";
-            quest_container.style.boxShadow = "0 0 0 8px rgba(88, 101, 242, 0.2)";
+            const restoreStyles = this.addCleanup(() => {
+                if (!tile.isConnected) return;
+                if (originalTabindex === null) tile.removeAttribute("tabindex");
+                else tile.setAttribute("tabindex", originalTabindex);
+                Object.assign(tile.style, { outline, outlineOffset, boxShadow, transition });
+            });
 
-            setTimeout(() => {
-                if (!quest_container.isConnected) return;
-                quest_container.style.outline = originalOutline;
-                quest_container.style.outlineOffset = originalOutlineOffset;
-                quest_container.style.boxShadow = originalBoxShadow;
-                quest_container.style.transition = originalTransition;
-            }, 5000);
+            Object.assign(tile.style, {
+                transition: "box-shadow 180ms ease, outline 180ms ease",
+                outline: `3px solid ${HIGHLIGHT_COLOR}`,
+                outlineOffset: "6px",
+                boxShadow: `0 0 0 8px ${HIGHLIGHT_GLOW_COLOR}`
+            });
+
+            this.setTimer(restoreStyles, HIGHLIGHT_DURATION_MS);
         };
 
-        setTimeout(highlight_container, 250);
+        this.setTimer(highlightTile, FOCUS_POLL_MS);
     }
 
-
-    showQuestNotification(quest, reminder = false) {
-        if (!quest) return;
-        const title = reminder ? `Reminder: New Quest Available!` : `New Quest Available!`;
-        
-        UI.showNotification({
-            title: title,
-            content: this.buildNotificationContent(quest),
-            icon: this.buildQuestIcon(quest),
-            type: "info",
-            duration: 5 * 60 * 1000,
-            actions: [
-                {
-                    label: "Go to Quests",
-                    onClick: async () => {
-                        await this.openQuests();
-                        this.focusQuestContainer(quest);
-                    }
-                },
-                {
-                    label: "Remind Me Later",
-                    onClick: () => {
-                        const existing_reminder = this._remindersTime.get(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id);
-                        if (existing_reminder) clearTimeout(existing_reminder);
-                        const reminderTimeout = setTimeout(() => {
-                            this._remindersTime.delete(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id);
-                            this.showQuestNotification(quest, true);
-                        }, 60 * 60 * 1000);
-                        this._remindersTime.set(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id, reminderTimeout);
-                    }
-                }
-            ]
-        })
+    /**
+     * @param {number} count
+     * @param {string} noun - Singular form; an `s` is appended for any count other than one.
+     * @returns {string} E.g. `1 quest` or `3 quests`.
+     */
+    pluralize(count, noun) {
+        return `${count} ${noun}${count === 1 ? "" : "s"}`;
     }
 
-    handleQuestChange() {
-        const quest = [...this._questsStore.quests.values()].find(x =>
-            !this._unsupportedQuests.has(x.id) &&
-            x.userStatus?.enrolledAt &&
-            !x.userStatus?.completedAt &&
-            new Date(x.config.expiresAt).getTime() > Date.now()
+    /**
+     * @param {Quest[]} quests
+     * @returns {React.ReactElement} The notification body for several quests: a short list plus a count of the rest.
+     */
+    buildSummaryContent(quests) {
+        const supported = quests.filter(x => this.isQuestSupported(x));
+        const unsupportedCount = quests.length - supported.length;
+        const listed = supported.slice(0, MAX_LISTED_QUESTS);
+        const hiddenCount = supported.length - listed.length;
+        const e = React.createElement;
+        const mutedStyle = { opacity: 0.8 };
+
+        return e("div", { style: { display: "flex", flexDirection: "column", gap: "6px" } },
+            supported.length ? e("div", { style: { marginBottom: "2px" } }, "Accept a quest to start auto-completing.") : null,
+            ...listed.map(quest => this.buildQuestHeader(quest)),
+            hiddenCount > 0 ? e("div", { style: mutedStyle }, `+${hiddenCount} more`) : null,
+            unsupportedCount > 0 ? e("div", { style: mutedStyle }, `${this.pluralize(unsupportedCount, "unsupported quest")} (complete manually)`) : null
         );
-        // Logger.info(this._config.info.name, "Quest: ", quest);
+    }
 
-        if (quest && (quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id) !== this._activeQuestId) {
-            this._activeQuestId = quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id;
-            this._activeQuestName = this.getQuestName(quest);
-            this._activeAppId = this.getQuestApplicationId(quest);
-            UI.showToast(`New quest found: ${this._activeQuestName}`, {type:"info"});
+    /**
+     * @param {Quest[]} quests
+     * @param {boolean} reminder - Prefixes the title with "Reminder".
+     * @returns {{title: string, content: React.ReactElement}}
+     */
+    buildNotificationAppearance(quests, reminder) {
+        const prefix = reminder ? "Reminder: " : "";
+        if (quests.length === 1) {
+            return {
+                title: `${prefix}New Quest Available!`,
+                content: this.buildNotificationContent(quests[0])
+            };
+        }
+        return {
+            title: `${prefix}${this.pluralize(quests.length, "new quest")} available`,
+            content: this.buildSummaryContent(quests)
+        };
+    }
+
+    /**
+     * @param {Quest[]} quests
+     * @returns {{label: string, onClick: Function}[]} The "Go to Quests" and "Remind Me Later" actions.
+     */
+    buildNotificationActions(quests) {
+        const questIds = new Set(quests.map(x => x.id));
+        return [
+            {
+                label: "Go to Quests",
+                onClick: () => {
+                    this.openQuests();
+                    if (quests.length === 1) this.focusQuestContainer(quests[0]);
+                }
+            },
+            {
+                label: "Remind Me Later",
+                onClick: () => {
+                    this.setTimer(() => {
+                        if (!this.settings.enableNotify) return;
+                        this.showQuestNotification(this.getQuests().filter(x => questIds.has(x.id) && this.isQuestNotifiable(x)), true);
+                    }, REMINDER_DELAY_MS);
+                }
+            }
+        ];
+    }
+
+    /**
+     * Shows one combined notification; quests of a still visible notification are merged into the new one.
+     * @param {Quest[]} quests
+     * @param {boolean} [reminder] - Marks the notification as a reminder.
+     */
+    showQuestNotification(quests, reminder = false) {
+        const visibleIds = this._notification?.isVisible?.() ? this._notificationQuestIds : null;
+        const visibleQuests = visibleIds ? this.getQuests().filter(x => visibleIds.has(x.id) && this.isQuestNotifiable(x)) : [];
+        const allQuests = [...visibleQuests, ...quests.filter(x => !visibleIds?.has(x.id))];
+        if (!allQuests.length) return;
+
+        this._notification?.close?.();
+        const questIds = new Set(allQuests.map(x => x.id));
+        const notification = UI.showNotification({
+            id: NOTIFICATION_ID,
+            ...this.buildNotificationAppearance(allQuests, reminder),
+            type: "info",
+            duration: NOTIFICATION_DURATION_MS,
+            actions: this.buildNotificationActions(allQuests),
+            onClose: () => {
+                if (this._notificationQuestIds !== questIds) return;
+                this._notification = null;
+                this._notificationQuestIds = null;
+            }
+        });
+
+        if (!notification) {
+            if (this._notifyRetries++ < NOTIFY_MAX_RETRIES) this.setTimer(() => this.showQuestNotification(allQuests, reminder), NOTIFY_RETRY_MS);
+            return;
+        }
+        this._notifyRetries = 0;
+        this._notification = notification;
+        this._notificationQuestIds = questIds;
+        for (const quest of allQuests) this._notifiedQuests.add(quest.id);
+    }
+
+    /** Starts the newly accepted quest unless it is already the active one. */
+    handleQuestChange() {
+        const quest = this.findEnrolledQuest();
+
+        if (quest && quest.id !== this._activeQuestId) {
+            this.activateQuest(quest);
+            UI.showToast(`New quest found: ${this._activeQuestName}`, { type: "info" });
             this.runQuest(quest);
         }
     }
 
+    /**
+     * Picks the task handler of the quest and runs it; unexpected errors open the error modal.
+     * @param {Quest} quest
+     */
     runQuest(quest) {
+        const lifecycleSignal = this._abortController?.signal;
+        if (!lifecycleSignal || lifecycleSignal.aborted) return;
+        const signal = this.startRun();
         try {
-            delete window.$;
-
-            let ApplicationStreamingStore = Webpack.Stores.ApplicationStreamingStore;
-            let FluxDispatcher = Webpack.getByKeys('dispatch', 'subscribe', 'register', { searchExports: true });
-            let api = Webpack.getModule(m => m?.Bo?.get)?.Bo;
-            let RunningGameStore = Webpack.Stores.RunningGameStore;
+            const dependencies = this.resolveDependencies();
+            if (!this.hasDependencies(dependencies, ["api"])) return;
 
             if (!quest) {
-                Logger.info(this._config.info.name, "No uncompleted quests found.");
+                Logger.info("No uncompleted quests found.");
                 UI.showToast("No uncompleted quests found.", { type: "info" });
                 return;
             }
 
-            if (this._remindersTime.has(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id)) {
-                clearTimeout(this._remindersTime.get(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id));
-                this._remindersTime.delete(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id);
-            }
+            this._notifiedQuests.delete(quest.id);
 
-            if (this._notifiedQuests.has(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id)) {
-                this._notifiedQuests.delete(quest.config.application?.id ?? this.getQuestApplicationId(quest) ?? quest.id);
-            }
-
-            const pid = Math.floor(Math.random() * 30000) + 1000;
-            // const tasked = quest.config.taskConfigV2 ?? quest.config.taskConfig;
-            const taskName = [...SUPPORTED_TASKS, "ACHIEVEMENT_IN_ACTIVITY"].find(x => quest.config.taskConfigV2.tasks[x] != null);
+            const tasks = quest.config?.taskConfigV2?.tasks ?? {};
+            const taskName = Object.keys(TASK_HANDLERS).find(x => tasks[x] != null);
 
             if (!taskName) {
-                if (this._unsupportedQuests.has(quest.id)) return;
-                this.markQuestUnsupported(quest);
-                const taskList = Object.keys(quest.config.taskConfigV2.tasks).join(", ");
-                Logger.info(this._config.info.name, `${this._activeQuestName} is not supported by this plugin. "Xbox and Playstation" Task.`);
-                UI.showToast(`Skipping ${this._activeQuestName}.`, { type: "warning" });
-                setTimeout(() => this.handleQuestChange(), 1000);
+                this.skipUnsupportedQuest(quest);
                 return;
             }
 
-            const secondsNeeded = quest.config.taskConfigV2.tasks[taskName].target;
-            let secondsDone = quest.userStatus?.progress?.[taskName]?.value ?? 0;
-
-            if (taskName === "WATCH_VIDEO" || taskName === "WATCH_VIDEO_ON_MOBILE") {
-                const speed = 7;
-                const enrolledAt = new Date(quest.userStatus.enrolledAt).getTime();
-                let isFinished = false;
-
-                (async () => {
-                    while (true) {
-                        const remain = Math.min(speed, secondsNeeded - secondsDone);
-                        await new Promise(resolve => setTimeout(resolve, remain * 1000));
-                        const timestamp = secondsDone + speed;
-
-
-                            const response = await api.post({ url: `/quests/${quest.id}/video-progress`, body: { timestamp: Math.min(secondsNeeded, timestamp + Math.random()) } });
-                            isFinished = response.body.completed_at != null;
-                            secondsDone = Math.min(secondsNeeded, timestamp);
-
-
-                        if (timestamp >= secondsNeeded) {
-                            break;
-                        }
-                    }
-                    if (!isFinished) {
-                        await api.post({ url: `/quests/${quest.id}/video-progress`, body: { timestamp: secondsNeeded } });
-                    }
-                    Logger.info(this._config.info.name, "Quest completed!");
-                    UI.showToast("Quest completed!", { type: "success" });
-                })();
-
-                Logger.info(this._config.info.name, `Spoofing video for ${this._activeQuestName}.`);
-                UI.showToast(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / speed)} sec.`, { type: "info" });
+            const secondsNeeded = tasks[taskName].target;
+            if (taskName !== "ACHIEVEMENT_IN_ACTIVITY" && !Number.isFinite(secondsNeeded)) {
+                Logger.error(`Quest "${this._activeQuestName}" has no valid target for ${taskName}.`);
+                UI.showToast(`Quest "${this._activeQuestName}" has an unexpected task format.`, { type: "error" });
+                return;
             }
-            else if (taskName === "PLAY_ON_DESKTOP") {
-                if (!this._activeQuestId) {
-                    Logger.error(this._config.info.name, `Could not resolve the application id for "${this._activeQuestName}".`);
-                    UI.showToast(`Could not resolve the application id for "${this._activeQuestName}".`, { type: "error" });
-                    return;
-                }
-                api.get({ url: `/applications/public?application_ids=${this._activeQuestId}` }).then(res => {
-                    const appData = res.body[0];
-                    const exeName = appData.executables?.find(x => x.os === "win32")?.name?.replace(">", "") ?? appData.name.replace(/[\/\\:*?"<>|]/g, "");
-                    const fakeGame = {
-                        cmdLine: `C:\\Program Files\\${appData.name}\\${exeName}`,
-                        exeName,
-                        exePath: `c:/program files/${appData.name.toLowerCase()}/${exeName}`,
-                        hidden: false,
-                        isLauncher: false,
-                        id: this._activeQuestId,
-                        name: appData.name,
-                        pid: pid,
-                        pidPath: [pid],
-                        processName: appData.name,
-                        start: Date.now(),
-                    };
-                    const realGames = RunningGameStore.getRunningGames();
-                    const fakeGames = [fakeGame];
-                    const realGetRunningGames = RunningGameStore.getRunningGames;
-                    const realGetGameForPID = RunningGameStore.getGameForPID;
-                    //games.push(fakeGame);
-                    RunningGameStore.getRunningGames = () => fakeGames;
-                    RunningGameStore.getGameForPID = (pid) => fakeGames.find(x => x.pid === pid);
-                    FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames });
 
-                    let fn = data => {
-                        let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.PLAY_ON_DESKTOP.value);
-                        Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
-                        UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
-                        if (progress >= secondsNeeded) {
-                            Logger.info(this._config.info.name, "Quest completed!");
-                            UI.showToast("Quest completed!", { type: "success" });
-                            // const idx = games.indexOf(fakeGame);
-                            // if(idx > -1) {
-                            //     games.splice(idx, 1);
-                            //     FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: []});
-                            // }
-                            RunningGameStore.getRunningGames = realGetRunningGames;
-                            RunningGameStore.getGameForPID = realGetGameForPID;
-                            FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
-                            FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
-                        }
-                    };
-                    FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
-                    Logger.info(this._config.info.name, `Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min.`);
-                    UI.showToast(`Spoofed game to ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min.`, { type: "info" });
-                });
-            }
-            else if (taskName === "STREAM_ON_DESKTOP") {
-                this._originalStreamerFunc = ApplicationStreamingStore.getStreamerActiveStreamMetadata;
-                ApplicationStreamingStore.getStreamerActiveStreamMetadata = () => ({
-                    id: this._activeQuestId,
-                    pid,
-                    sourceName: null
-                });
-                let fn = data => {
-                    let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.STREAM_ON_DESKTOP.value);
-                    Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
-                    UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
-                    if (progress >= secondsNeeded) {
-                        Logger.info(this._config.info.name, "Quest completed!");
-                        UI.showToast("Quest completed!", { type: "success" });
-                        ApplicationStreamingStore.getStreamerActiveStreamMetadata = this._originalStreamerFunc;
-                        FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
-                    }
-                };
-                FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
-                Logger.info(this._config.info.name, `Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min. (Need at least one VC peer)`);
-                UI.showToast(`Spoofed stream to ${this._activeQuestName}. Stream ~${Math.ceil((secondsNeeded - secondsDone) / 60)} min. (Need at least one VC peer)`, { type: "info" });
-            }
-            else if (taskName === "PLAY_ACTIVITY") {
-                const channelId = Webpack.Stores.ChannelStore.getSortedPrivateChannels()[0]?.id ||
-                    Object.values(Webpack.Stores.GuildChannelStore.getAllGuilds()).find(x => x && x.VOCAL.length > 0).VOCAL[0].channel.id;
-                const streamKey = `call:${channelId}:1`;
-                (async () => {
-                    Logger.info(this._config.info.name, "Completing quest", this._activeQuestName, "-", quest.config.messages.questName);
-                    UI.showToast(`Completing quest ${this._activeQuestName} - ${quest.config.messages.questName}`, { type: "info" });
-                    while (true) {
-                        const res = await api.post({ url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: false } });
-                        const progress = res.body.progress.PLAY_ACTIVITY.value;
-                        Logger.info(this._config.info.name, `Quest progress: ${progress}/${secondsNeeded}`);
-                        UI.showToast(`Quest progress: ${progress}/${secondsNeeded}`, { type: "info" });
-                        await new Promise(resolve => setTimeout(resolve, 20000));
-                        if (progress >= secondsNeeded) {
-                            await api.post({ url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: true } });
-                            break;
-                        }
-                    }
-                    Logger.info(this._config.info.name, "Quest completed!");
-                    UI.showToast("Quest completed!", { type: "success" });
-                })();
-            }
-            else if (taskName === "ACHIEVEMENT_IN_ACTIVITY") {
-                if (this._unsupportedQuests.has(quest.id)) return;
-                this.markQuestUnsupported(quest);
-                UI.showConfirmationModal("Unsupported Quest Task", [`The quest "${this._activeQuestName}" has an unsupported Quest type: ${taskName}.`, "AutoQuestComplete will not be able to complete this quest. Because it's a server-side quest.\n  **Please complete it manually**."], {
-                    confirmText: "Go to Quest",
-                    onConfirm: async (e) => {
-                        await new Promise(resolve => {
-                            const started = Date.now();
-                            const check = () => {
-                                if (!document.querySelector('[role="dialog"]') || Date.now() - started > 3000) return resolve();
-                                setTimeout(check, 100);
-                            };
-                            check();
-                        });
-                        await this.openQuests();
-                        this.focusQuestContainer(quest);
-                    }
-                });
-                setTimeout(() => this.handleQuestChange(), 5000);
-            }
+            this.getTaskHandler(taskName)?.call(this, {
+                quest,
+                taskName,
+                secondsNeeded,
+                secondsDone: quest.userStatus?.progress?.[taskName]?.value ?? 0,
+                signal,
+                lifecycleSignal,
+                dependencies,
+                pid: this.generateFakePid(dependencies.RunningGameStore)
+            });
         } catch (err) {
-            UI.showConfirmationModal("Error", ["An error occurred while trying to complete the quest. Please reach out to developer with the following information:", `Quest Name: ${this._activeQuestName}`, `Error: ${err.message}`, `Or click to send report to create an issue on github`], {
-                confirmText: "Report Issue",
-                onConfirm: async () => {
-                    const issueTitle = encodeURIComponent(`Error while completing quest: ${this._activeQuestName}`);
-                    const issueBody = encodeURIComponent(`**Quest Name:** ${this._activeQuestName}\n**Error:** ${err.message}\n**Stack Trace:**\n\`\`\`${err.stack}\`\`\``);
-                    const issueUrl = `https://github.com/xenoncolt/AutoQuestComplete/issues/new?title=${issueTitle}&body=${issueBody}`;
-                    open(issueUrl);
-                },
-            })
+            this.showErrorModal(err);
         }
     }
 
-    async checkForUpdate() {
-        try {
-            let fileContent = await (await fetch(this._config.info.github_raw, { headers: { "User-Agent": "BetterDiscord" } })).text();
-            let remoteMeta = this.parseMeta(fileContent);
-            if (Utils.semverCompare(this._config.info.version, remoteMeta.version) > 0) {
-                this.newUpdateNotify(remoteMeta, fileContent);
+    /**
+     * Patcher.instead returns null when a patch fails; in that case earlier patches are reverted and the run fails visibly.
+     * @param {Array<[object, string, Function]>} targets - Module, function name and replacement.
+     * @returns {Function} Reverts all patches.
+     * @throws {Error} If a patch could not be applied.
+     */
+    patchInstead(targets) {
+        const unpatches = [];
+        const unpatchAll = () => unpatches.forEach(unpatch => unpatch());
+        for (const [module, functionName, callback] of targets) {
+            const unpatch = Patcher.instead(module, functionName, callback);
+            if (!unpatch) {
+                unpatchAll();
+                throw new Error(`Could not patch ${functionName}. Discord may have changed.`);
             }
+            unpatches.push(unpatch);
         }
-        catch (err) {
-            Logger.error(this._config.info.name, err);
-        }
-
+        return unpatchAll;
     }
 
-    newUpdateNotify(remoteMeta, remoteFile) {
-        Logger.info(this._config.info.name, "A new update is available!");
+    /**
+     * @param {object} [runningGameStore]
+     * @returns {number} A random process id that no running game uses.
+     */
+    generateFakePid(runningGameStore) {
+        const usedPids = new Set((runningGameStore?.getRunningGames?.() ?? []).map(game => game.pid));
+        let pid;
+        do {
+            pid = Math.floor(Math.random() * FAKE_PID_RANGE) + FAKE_PID_MIN;
+        } while (usedPids.has(pid));
+        return pid;
+    }
 
-        // UI.showConfirmationModal("Update Available", [`Update ${remoteMeta.version} is now available for AutoQuestComplete!`, "Press Download Now to update!"], {
-        //     confirmText: "Download Now",
-        //     onConfirm: async (e) => {
-        //         if (remoteFile) {
-        //             await new Promise(r => require("fs").writeFile(require("path").join(BdApi.Plugins.folder, `${this._config.info.name}.plugin.js`), remoteFile, r));
-        //             try {
-        //                 let currentVersionInfo = Data.load(this._config.info.name, "currentVersionInfo");
-        //                 currentVersionInfo.hasShownChangelog = false;
-        //                 Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
-        //             } catch (err) {
-        //                 UI.showToast("An error occurred when trying to download the update!", { type: "error" });
-        //             }
-        //         }
-        //     }
-        // });
-        UI.showNotification({
+    /**
+     * @param {string} taskName
+     * @returns {((context: TaskContext) => void)|undefined} The handler method, or undefined for unknown tasks.
+     */
+    getTaskHandler(taskName) {
+        return this[TASK_HANDLERS[taskName]];
+    }
+
+    /**
+     * Marks a quest without a supported task as unsupported and moves on to the next quest.
+     * @param {Quest} quest
+     */
+    skipUnsupportedQuest(quest) {
+        if (this._unsupportedQuests.has(quest.id)) return;
+        this.markQuestUnsupported(quest);
+        Logger.info(`${this._activeQuestName} is not supported by this plugin (no supported task found).`);
+        UI.showToast(`Skipping ${this._activeQuestName}.`, { type: "warning" });
+        this.setTimer(() => this.handleQuestChange(), SKIP_NEXT_QUEST_DELAY_MS);
+    }
+
+    /**
+     * Handler for the video tasks: reports video progress until the target is reached.
+     * @param {TaskContext} context
+     */
+    runWatchVideo({ quest, secondsNeeded, secondsDone, signal, lifecycleSignal, dependencies }) {
+        const { api } = dependencies;
+        const speed = WATCH_VIDEO_STEP_SECONDS;
+        let isFinished = false;
+        let reachedEnd = false;
+        (async () => {
+            while (!signal.aborted) {
+                const remain = Math.min(speed, secondsNeeded - secondsDone);
+                await this.sleep(remain * MS_PER_SECOND, signal);
+                if (signal.aborted) return;
+                const timestamp = secondsDone + speed;
+
+                const response = await this.request(api, "post", { url: `/quests/${quest.id}/video-progress`, body: { timestamp: Math.min(secondsNeeded, timestamp + Math.random()) } }, signal);
+                isFinished = response?.body?.completed_at != null;
+                secondsDone = Math.min(secondsNeeded, timestamp);
+
+                if (timestamp >= secondsNeeded) {
+                    reachedEnd = true;
+                    break;
+                }
+            }
+            if (!reachedEnd || lifecycleSignal.aborted) return;
+            if (!isFinished) {
+                await this.request(api, "post", { url: `/quests/${quest.id}/video-progress`, body: { timestamp: secondsNeeded } }, lifecycleSignal);
+            }
+            Logger.info("Quest completed!");
+            UI.showToast("Quest completed!", { type: "success" });
+        })().catch(err => this.reportAsyncError(err, signal));
+
+        Logger.info(`Spoofing video for ${this._activeQuestName}.`);
+        UI.showToast(`Spoofing video for ${this._activeQuestName}. Wait ~${Math.ceil((secondsNeeded - secondsDone) / speed)} sec.`, { type: "info" });
+    }
+
+    /**
+     * Handler for `PLAY_ON_DESKTOP`: spoofs a running game until Discord reports the target as reached.
+     * @param {TaskContext} context
+     */
+    runPlayOnDesktop({ quest, taskName, secondsNeeded, secondsDone, signal, dependencies, pid }) {
+        const { api, FluxDispatcher, RunningGameStore } = dependencies;
+        if (!this.hasApplicationId()) return;
+        if (!this.hasDependencies(dependencies, ["FluxDispatcher", "RunningGameStore"])) return;
+        this.request(api, "get", { url: `/applications/public?application_ids=${this._activeAppId}` }, signal).then(res => {
+            if (signal.aborted) return;
+            const appData = res?.body?.[0];
+            if (!appData?.name) throw new Error("Application data not found.");
+            const exeName = appData.executables?.find(x => x.os === "win32")?.name?.replace(">", "") ?? appData.name.replace(/[/\\:*?"<>|]/g, "");
+            const fakeGame = {
+                cmdLine: `C:\\Program Files\\${appData.name}\\${exeName}`,
+                exeName,
+                exePath: `c:/program files/${appData.name.toLowerCase()}/${exeName}`,
+                hidden: false,
+                isLauncher: false,
+                id: this._activeAppId,
+                name: appData.name,
+                pid: pid,
+                pidPath: [pid],
+                processName: appData.name,
+                start: Date.now(),
+            };
+            const realGames = RunningGameStore.getRunningGames();
+            const fakeGames = [fakeGame];
+            const unpatchGames = this.patchInstead([
+                [RunningGameStore, "getRunningGames", () => fakeGames],
+                [RunningGameStore, "getGameForPID", (_, [gamePid]) => fakeGames.find(x => x.pid === gamePid)]
+            ]);
+            FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames });
+
+            const heartbeatHandler = this.createHeartbeatHandler(quest, taskName, secondsNeeded, () => stopSpoofing());
+            const stopSpoofing = this.addCleanup(() => {
+                unpatchGames();
+                FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
+                FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
+            }, this._runCleanups);
+
+            FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
+            const minutesLeft = Math.ceil((secondsNeeded - secondsDone) / SECONDS_PER_MINUTE);
+            Logger.info(`Spoofed game to ${this._activeQuestName}. Wait ~${minutesLeft} min.`);
+            UI.showToast(`Spoofed game to ${this._activeQuestName}. Wait ~${minutesLeft} min.`, { type: "info" });
+        }).catch(err => this.reportAsyncError(err, signal));
+    }
+
+    /**
+     * Handler for `STREAM_ON_DESKTOP`: spoofs the stream metadata until Discord reports the target as reached.
+     * @param {TaskContext} context
+     */
+    runStreamOnDesktop({ quest, taskName, secondsNeeded, secondsDone, dependencies, pid }) {
+        const { FluxDispatcher, ApplicationStreamingStore } = dependencies;
+        if (!this.hasApplicationId()) return;
+        if (!this.hasDependencies(dependencies, ["FluxDispatcher", "ApplicationStreamingStore"])) return;
+        const unpatchStream = this.patchInstead([[ApplicationStreamingStore, "getStreamerActiveStreamMetadata", () => ({
+            id: this._activeAppId,
+            pid,
+            sourceName: null
+        })]]);
+        const heartbeatHandler = this.createHeartbeatHandler(quest, taskName, secondsNeeded, () => stopSpoofing());
+        const stopSpoofing = this.addCleanup(() => {
+            unpatchStream();
+            FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
+        }, this._runCleanups);
+        FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", heartbeatHandler);
+        const minutesLeft = Math.ceil((secondsNeeded - secondsDone) / SECONDS_PER_MINUTE);
+        Logger.info(`Spoofed stream to ${this._activeQuestName}. Stream ~${minutesLeft} min. (Need at least one VC peer)`);
+        UI.showToast(`Spoofed stream to ${this._activeQuestName}. Stream ~${minutesLeft} min. (Need at least one VC peer)`, { type: "info" });
+    }
+
+    /**
+     * Handler for `PLAY_ACTIVITY`: sends heartbeats for an activity channel until the target is reached.
+     * @param {TaskContext} context
+     */
+    runPlayActivity({ quest, secondsNeeded, secondsDone, signal, lifecycleSignal, dependencies }) {
+        const { api } = dependencies;
+        const channelId = this.findActivityChannelId();
+        if (!channelId) {
+            Logger.error(`No private or voice channel found for "${this._activeQuestName}".`);
+            UI.showToast(`Could not find a channel to complete "${this._activeQuestName}". Join a server with a voice channel or open a DM.`, { type: "error" });
+            return;
+        }
+        const streamKey = `call:${channelId}:1`;
+        (async () => {
+            Logger.info(`Completing quest ${this._activeQuestName}.`);
+            UI.showToast(`Completing quest ${this._activeQuestName}.`, { type: "info" });
+            let reachedEnd = false;
+            const maxHeartbeats = Math.ceil(Math.max(secondsNeeded - secondsDone, 0) / (HEARTBEAT_INTERVAL_MS / MS_PER_SECOND)) + HEARTBEAT_EXTRA_ATTEMPTS;
+            for (let heartbeat = 0; heartbeat < maxHeartbeats && !signal.aborted; heartbeat++) {
+                const res = await this.request(api, "post", { url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: false } }, signal);
+                if (signal.aborted) return;
+                const progress = res?.body?.progress?.PLAY_ACTIVITY?.value;
+                if (typeof progress !== "number") throw new Error("Unexpected heartbeat response.");
+                this.reportProgress(progress, secondsNeeded);
+                await this.sleep(HEARTBEAT_INTERVAL_MS, signal);
+                if (lifecycleSignal.aborted || (signal.aborted && progress < secondsNeeded)) return;
+                if (progress >= secondsNeeded) {
+                    await this.request(api, "post", { url: `/quests/${quest.id}/heartbeat`, body: { stream_key: streamKey, terminal: true } }, lifecycleSignal);
+                    reachedEnd = true;
+                    break;
+                }
+            }
+            if (!reachedEnd && !signal.aborted) throw new Error("Quest did not reach its target in the expected time.");
+            if (!reachedEnd || lifecycleSignal.aborted) return;
+            Logger.info("Quest completed!");
+            UI.showToast("Quest completed!", { type: "success" });
+        })().catch(err => this.reportAsyncError(err, signal));
+    }
+
+    /**
+     * Handler for `ACHIEVEMENT_IN_ACTIVITY`: the task is server-side, so the quest is marked unsupported and the user is asked to complete it manually.
+     * @param {TaskContext} context
+     */
+    runAchievementInActivity({ quest, taskName }) {
+        if (this._unsupportedQuests.has(quest.id)) return;
+        this.markQuestUnsupported(quest);
+        UI.showConfirmationModal("Unsupported Quest Task", [`The quest "${this._activeQuestName}" has an unsupported Quest type: ${taskName}.`, "AutoQuestComplete will not be able to complete this quest. Because it's a server-side quest.\n  **Please complete it manually**."], {
+            confirmText: "Go to Quest",
+            onConfirm: async () => {
+                await new Promise(resolve => {
+                    const started = Date.now();
+                    const check = () => {
+                        if (!document.querySelector('[role="dialog"]') || Date.now() - started > DIALOG_CLOSE_TIMEOUT_MS) return resolve();
+                        this.setTimer(check, DIALOG_POLL_MS);
+                    };
+                    check();
+                });
+                this.openQuests();
+                this.focusQuestContainer(quest);
+            }
+        });
+        this.setTimer(() => this.handleQuestChange(), UNSUPPORTED_NEXT_QUEST_DELAY_MS);
+    }
+
+    /**
+     * @param {{body?: {message?: string}, message?: string}} err
+     * @returns {string} The most specific readable message of the error.
+     */
+    getErrorMessage(err) {
+        return err?.body?.message ?? err?.message ?? String(err ?? "Unknown error");
+    }
+
+    /**
+     * Removes local user paths so the report does not leak them.
+     * @param {string} [stack]
+     * @returns {string} The sanitized stack trace, truncated to the report limit.
+     */
+    sanitizeStack(stack) {
+        return String(stack ?? "No stack trace available")
+            .replace(/[A-Za-z]:\\Users\\[^\\\s)]+/g, "<user>")
+            .replace(/\/(?:Users|home)\/[^/\s)]+/g, "/<user>")
+            .slice(0, MAX_REPORT_STACK_LENGTH);
+    }
+
+    /**
+     * Shows an error modal that offers a prefilled GitHub issue.
+     * @param {Error} err
+     */
+    showErrorModal(err) {
+        const questName = this._activeQuestName ?? "Unknown Quest";
+        const message = this.getErrorMessage(err);
+        UI.showConfirmationModal("Error", [
+            "An error occurred while trying to complete the quest. Please reach out to the developer with the following information:",
+            `Quest Name: ${questName}`,
+            `Error: ${message}`,
+            "Report Issue opens a prefilled GitHub issue with the error and a stack trace (local user paths removed). Review it before submitting."
+        ], {
+            confirmText: "Report Issue",
+            onConfirm: () => {
+                const title = encodeURIComponent(`Error while completing quest: ${questName}`);
+                const body = encodeURIComponent(`**Quest Name:** ${questName}\n**Error:** ${message}\n**Stack Trace:**\n\`\`\`\n${this.sanitizeStack(err?.stack)}\n\`\`\``);
+                window.open(`${this._config.info.github}/issues/new?title=${title}&body=${body}`, "_blank", "noopener,noreferrer");
+            }
+        });
+    }
+
+    /**
+     * `@source` links to the file on GitHub (see BD docs); the download uses the matching raw URL.
+     * @returns {string|null} The raw file URL, or null if `@source` is not a GitHub file link.
+     */
+    getRawSourceUrl() {
+        const blob = this._sourceUrl.match(GITHUB_BLOB_PATTERN);
+        if (blob) return `https://raw.githubusercontent.com/${blob[1]}/${blob[2]}/${blob[3]}`;
+        return this._sourceUrl.startsWith(GITHUB_RAW_PREFIX) ? this._sourceUrl : null;
+    }
+
+    /**
+     * Downloads the plugin file from the source repository.
+     * @returns {Promise<{fileContent: string, remoteMeta: object}>}
+     * @throws {Error} If there is no valid source, the request fails or times out.
+     */
+    async fetchRemotePlugin() {
+        const signal = AbortSignal.any([this._abortController.signal, AbortSignal.timeout(UPDATE_TIMEOUT_MS)]);
+        const rawUrl = this.getRawSourceUrl();
+        if (!rawUrl) throw new Error("The plugin header has no valid GitHub @source URL");
+        const response = await fetch(rawUrl, { signal });
+        if (!response.ok) throw new Error(`Update server responded with ${response.status}`);
+        const fileContent = await response.text();
+        return { fileContent, remoteMeta: this.parseMeta(fileContent) };
+    }
+
+    /**
+     * The remote file must be this plugin and a newer, valid semver version before it is offered.
+     * @param {object} remoteMeta - Parsed header of the remote file.
+     * @returns {boolean}
+     */
+    isValidUpdate(remoteMeta) {
+        return remoteMeta.name === this._config.info.name &&
+            SEMVER_PATTERN.test(remoteMeta.version ?? "") &&
+            Utils.semverCompare(this._version, remoteMeta.version) > 0;
+    }
+
+    /** Checks for an update now and again after every interval. */
+    scheduleUpdateChecks() {
+        this.checkForUpdate();
+        this.setTimer(() => this.scheduleUpdateChecks(), UPDATE_CHECK_INTERVAL_MS);
+    }
+
+    /**
+     * Offers an update notification if the repository has a newer version. Failures are logged only.
+     * @returns {Promise<void>}
+     */
+    async checkForUpdate() {
+        if (!this._abortController) return;
+        try {
+            const { fileContent, remoteMeta } = await this.fetchRemotePlugin();
+            if (this.isValidUpdate(remoteMeta)) this.newUpdateNotify(remoteMeta, fileContent);
+        } catch (err) {
+            if (!this._abortController || err?.name === "AbortError") return;
+            Logger.error("Update check failed", err);
+        }
+    }
+
+    /**
+     * Writes the new plugin file; BetterDiscord then reloads the plugin.
+     * @param {string} remoteFile - Content of the new plugin file.
+     * @returns {Promise<void>}
+     */
+    async installUpdate(remoteFile) {
+        const { name } = this._config.info;
+        const target = require("path").join(BdApi.Plugins.folder, `${name}.plugin.js`);
+        try {
+            await require("fs").promises.writeFile(target, remoteFile);
+        } catch (err) {
+            UI.showToast("An error occurred when trying to download the update!", { type: "error" });
+            Logger.error("Could not write the update file", err);
+            return;
+        }
+        try {
+            const versionInfo = Data.load("currentVersionInfo") ?? {};
+            Data.save("currentVersionInfo", { ...versionInfo, hasShownChangelog: false });
+        } catch (err) {
+            Logger.error("Could not reset the changelog flag", err);
+        }
+        UI.showToast("AutoQuestComplete was updated and will reload automatically.", { type: "success" });
+    }
+
+    /**
+     * Shows the update notification with "Update Now" and "Update Later".
+     * @param {object} remoteMeta - Parsed header of the remote file.
+     * @param {string} remoteFile - Content of the remote file.
+     */
+    newUpdateNotify(remoteMeta, remoteFile) {
+        Logger.info("A new update is available!");
+
+        this._updateNotification = UI.showNotification({
             title: `${this._config.info.name} Update Available!`,
-            content: `Version ${remoteMeta.version} is now available!`,
+            content: `Version ${remoteMeta.version} is now available (installed: ${this._version}).`,
+            id: UPDATE_NOTIFICATION_ID,
             type: "info",
-            duration: 1/0,
+            duration: UPDATE_NOTIFICATION_DURATION_MS,
             actions: [
                 {
                     label: "Update Now",
-                    onClick: async (e) => {
-                        if (remoteFile) {
-                            await new Promise(r => require("fs").writeFile(require("path").join(BdApi.Plugins.folder, `${this._config.info.name}.plugin.js`), remoteFile, r));
-                            try {
-                                let currentVersionInfo = Data.load(this._config.info.name, "currentVersionInfo");
-                                currentVersionInfo.hasShownChangelog = false;
-                                Data.save(this._config.info.name, "currentVersionInfo", currentVersionInfo);
-                            } catch (err) {
-                                UI.showToast("An error occurred when trying to download the update!", { type: "error" });
-                                Logger.error(this._config.info.name, "An error occurred when trying to download the update!", err);
-                            }
-                        }
-                    }
+                    onClick: () => this.installUpdate(remoteFile)
                 },
                 {
-                    label: "Update Later",
-                    onClick: () => { }
+                    label: "Update Later"
                 }
             ]
-        })
+        });
     }
 
+    /**
+     * @param {string} fileContent - Plugin source.
+     * @returns {Object<string, string>} The `@key value` pairs of the header comment.
+     */
     parseMeta(fileContent) {
         const meta = {};
-        const regex = /@([a-zA-Z]+)\s+(.+)/g;
-        let match;
-        while ((match = regex.exec(fileContent)) !== null) {
+        const header = fileContent.match(/^\s*\/\*\*[\s\S]*?\*\//)?.[0] ?? "";
+        for (const match of header.matchAll(/@([a-zA-Z]+)[ \t]+(.+)/g)) {
             meta[match[1]] = match[2].trim();
         }
         return meta;
