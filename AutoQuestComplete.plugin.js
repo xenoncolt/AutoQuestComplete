@@ -709,7 +709,8 @@ return e("div", { key: quest.id, style: { display: "flex", alignItems: "center",
             }) : null,
             e("div", { style: { display: "flex", flexDirection: "column", minWidth: 0 } },
                 e("strong", null, this.getQuestName(quest)),
-                reward ? e("span", { style: { opacity: 0.9 } }, reward) : null            )        );
+                reward ? e("span", { style: { opacity: 0.9 } }, reward) : null
+            )        );
     }
 
     /**
