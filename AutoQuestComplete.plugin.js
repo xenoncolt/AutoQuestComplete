@@ -663,29 +663,53 @@ class AutoQuestComplete {
 
     /**
      * @param {Quest} quest
-     * @returns {string|null} The CDN URL of the quest's tile image, or null if it has none.
+     * @returns {string[]} CDN URLs of the quest's tile image, best match first (plain path, then themed paths of the current and the other theme).
      */
-    getQuestIconUrl(quest) {
+    getQuestIconUrls(quest) {
         const assets = quest?.config?.assets ?? {};
-        const file = assets.gameTileLight || assets.gameTileDark || assets.logotypeLight;
-        if (!file) return null;
-        return `https://cdn.discordapp.com/${file}`;
+        const light = document.documentElement.classList.contains("theme-light");
+        const suffixes = light ? ["Light", "Dark"] : ["Dark", "Light"];
+        // Discord fills gameTile/logotype with "PLACEHOLDER"; the real paths ("quests/<id>/<file>") are in the themed fields.
+        const keys = [...suffixes.map(s => `gameTile${s}`), ...suffixes.map(s => `logotype${s}`), "gameTile", "logotype"];
+        const urls = [];
+        for (const key of keys) {
+            const file = assets[key];
+            if (!file || file === "PLACEHOLDER") continue;
+            const url = `https://cdn.discordapp.com/${file.startsWith("quests/") ? file : `quests/${quest.id}/${file}`}`;
+            if (!urls.includes(url)) urls.push(url);
+        }
+        return urls;
     }
 
     /**
      * @param {Quest} quest
-     * @returns {Function|undefined} A React component for the notification icon, or undefined without an image.
+     * @returns {React.ReactElement} The quest image on the left, the name and the reward below each other on the right.
      */
-    buildQuestIcon(quest) {
-        const url = this.getQuestIconUrl(quest);
-        if (!url) return undefined;
-        return () => React.createElement("img", {
-            src: url,
-            width: 36,
-            height: 36,
-            style: { borderRadius: "8px", objectFit: "cover" },
-            onError: (event) => { event.currentTarget.style.display = "none"; }
-        });
+    buildQuestHeader(quest) {
+        const e = React.createElement;
+        const urls = this.getQuestIconUrls(quest);
+const reward = this.getRewardText(quest);
+
+return e("div", { key: quest.id, style: { display: "flex", alignItems: "center", gap: "10px" } },
+            urls.length ? e("img", {
+                src: urls[0],
+                width: 40,
+                height: 40,
+                style: { borderRadius: "8px", objectFit: "cover", flexShrink: 0 },
+                onError: (event) => {
+                    const img = event.currentTarget;
+                    const next = Number(img.dataset.urlIndex ?? 0) + 1;
+                    if (next < urls.length) {
+                        img.dataset.urlIndex = String(next);
+                        img.src = urls[next];
+                    } else {
+                        img.style.display = "none";
+                    }
+                }
+            }) : null,
+            e("div", { style: { display: "flex", flexDirection: "column", minWidth: 0 } },
+                e("strong", null, this.getQuestName(quest)),
+                reward ? e("span", { style: { opacity: 0.9 } }, reward) : null            )        );
     }
 
     /**
@@ -694,7 +718,6 @@ class AutoQuestComplete {
      */
     buildNotificationContent(quest) {
         const intro = this.isQuestSupported(quest) ? `Accept "${this.getQuestName(quest)}" to start auto-completing.` : `"${this.getQuestName(quest)}" has to be completed manually, AutoQuestComplete can't do this quest type for you.`;
-        const reward = this.getRewardText(quest);
         const task = this.getQuestTaskInfo(quest);
         const publisher = quest?.config?.messages?.gamePublisher;
         const expiresIn = this.formatRelativeTime(quest?.config?.expiresAt);
@@ -706,8 +729,8 @@ class AutoQuestComplete {
             : null;
 
         return e("div", { style: { display: "flex", flexDirection: "column", gap: "3px" } },
-            e("div", { style: { marginBottom: "2px" } }, intro),
-            row("Reward", reward),
+            this.buildQuestHeader(quest),
+            e("div", { style: { margin: "4px 0 2px" } }, intro),
             row("Task", task),
             row("Publisher", publisher),
             row("Expires in", expiresIn)
@@ -727,7 +750,9 @@ class AutoQuestComplete {
      */
     resolveDependencies() {
         return {
-            api: Webpack.getByKeys("get", "post", "put", "patch", "del", { searchExports: true }),
+            // Other modules also expose get/post but take a URL string instead of `{url, body}`.
+            api: Webpack.getModule(m => typeof m?.Bo?.get === "function" && typeof m.Bo.post === "function")?.Bo
+                ?? Webpack.getByKeys("get", "post", "put", "patch", "del", { searchExports: true }),
             FluxDispatcher: Webpack.getByKeys("dispatch", "subscribe", "register")
                 ?? Webpack.getByKeys("dispatch", "subscribe", "register", { searchExports: true }),
             ApplicationStreamingStore: Webpack.Stores.ApplicationStreamingStore,
@@ -984,15 +1009,10 @@ class AutoQuestComplete {
         const hiddenCount = supported.length - listed.length;
         const e = React.createElement;
         const mutedStyle = { opacity: 0.8 };
-        const describe = quest => {
-            const expiresIn = this.formatRelativeTime(quest.config?.expiresAt);
-            const details = [this.getRewardText(quest), this.getQuestTaskInfo(quest), expiresIn && `expires in ${expiresIn}`].filter(Boolean).join(" • ");
-            return details ? ` - ${details}` : "";
-        };
 
-        return e("div", { style: { display: "flex", flexDirection: "column", gap: "3px" } },
+        return e("div", { style: { display: "flex", flexDirection: "column", gap: "6px" } },
             supported.length ? e("div", { style: { marginBottom: "2px" } }, "Accept a quest to start auto-completing.") : null,
-            ...listed.map(quest => e("div", { key: quest.id }, e("strong", null, this.getQuestName(quest)), describe(quest))),
+            ...listed.map(quest => this.buildQuestHeader(quest)),
             hiddenCount > 0 ? e("div", { style: mutedStyle }, `+${hiddenCount} more`) : null,
             unsupportedCount > 0 ? e("div", { style: mutedStyle }, `${this.pluralize(unsupportedCount, "unsupported quest")} (complete manually)`) : null
         );
@@ -1001,15 +1021,14 @@ class AutoQuestComplete {
     /**
      * @param {Quest[]} quests
      * @param {boolean} reminder - Prefixes the title with "Reminder".
-     * @returns {{title: string, content: React.ReactElement, icon?: Function}}
+     * @returns {{title: string, content: React.ReactElement}}
      */
     buildNotificationAppearance(quests, reminder) {
         const prefix = reminder ? "Reminder: " : "";
         if (quests.length === 1) {
             return {
                 title: `${prefix}New Quest Available!`,
-                content: this.buildNotificationContent(quests[0]),
-                icon: this.buildQuestIcon(quests[0])
+                content: this.buildNotificationContent(quests[0])
             };
         }
         return {
